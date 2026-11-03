@@ -1,0 +1,14 @@
+ validated_count 
+-----------------
+             100
+(1 row)
+
+ rejected_count 
+----------------
+              0
+(1 row)
+
+ rejection_reason | occurrences 
+------------------+-------------
+(0 rows)
+

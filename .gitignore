@@ -2,18 +2,16 @@
 .DS_Store
 __pycache__/
 *.pyc
-runtime/current-run.env
-runtime/current-run.json
-runtime/current-network.json
+# État du run et perturbations : tout reste local, sauf les .gitkeep
+runtime/*
+!runtime/.gitkeep
+!runtime/observability/
 runtime/observability/*
 !runtime/observability/.gitkeep
 
-infra/kafka/secrets/*.jks
-infra/kafka/secrets/*.p12
-infra/kafka/secrets/*.pem
-infra/kafka/secrets/*.csr
-infra/kafka/secrets/*.srl
-infra/kafka/secrets/*_creds
+# Secrets TLS Kafka : tout reste local, sauf le .gitkeep
+infra/kafka/secrets/*
+!infra/kafka/secrets/.gitkeep
 
 .venv/
 powerpoint-prepare/
