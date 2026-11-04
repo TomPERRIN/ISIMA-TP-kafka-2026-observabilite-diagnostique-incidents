@@ -1,0 +1,4 @@
+# Fin de ligne : les scripts shell doivent rester en LF, y compris
+# sur un checkout Windows (sinon les conteneurs Linux qui montent
+# ces scripts refusent de les executer : /bin/sh^M).
+*.sh text eol=lf

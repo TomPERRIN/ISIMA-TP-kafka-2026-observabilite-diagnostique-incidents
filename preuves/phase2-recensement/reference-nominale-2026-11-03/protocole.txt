@@ -1,0 +1,19 @@
+PROTOCOLE DE LA MESURE DE REFERENCE NOMINALE (SAE 5, phase 2)
+Date : 2026-11-03
+Machine : Windows 11 + Docker Desktop (4 Go), execution via WSL Ubuntu.
+
+Commandes executes dans l'ordre (depuis la racine du depot) :
+  ./scripts/run-scenario.sh nominal 100 10
+  sleep 8 ; curl -fsS http://localhost:8082/health/details > health-details-inflight.json
+  sleep 25
+  curl -fsS http://localhost:8082/health/details > health-details-final.json
+  ./scripts/tp-status.sh > tp-status-final.txt
+  ./scripts/tp-kafka.sh > tp-kafka-final.txt
+  ./scripts/tp-db.sh    > tp-db-final.txt
+
+Attendus nominaux :
+  - status "ok", alerts []
+  - 100 generated = processed = validated = outcome = db_validated
+  - rejected = 0, persistence_gap_valid = persistence_gap_rejected = 0
+  - lag_total = 0 sur les 5 groupes applicatifs
+  - partitions sous-repliquees = 0 sur les 3 brokers

@@ -1,0 +1,70 @@
+============================================================
+TP Status - météo lisible de la plateforme simul-pix
+============================================================
+
+À retenir :
+- cette commande résume la santé de la plateforme ;
+- les compteurs métier disent combien de Pix ont traversé le pipeline ;
+- le lag Kafka indique si des consommateurs sont en retard ;
+- le JSON complet reste disponible en mode verbose.
+
+1) État global
+--------------
+Plateforme : OK (ok)
+Run id     : 1793706031
+Alertes    : 0
+  - aucune alerte active
+
+2) Compteurs métier
+-------------------
+Ces valeurs permettent de suivre le chemin d'une transaction Pix.
+Pix générés                : 100
+Pix traités par décision   : 100
+Pix acceptés               : 100
+Pix rejetés                : 0
+Réponses finales outcome   : 100
+Persistés en base valides  : 100
+Persistés en base rejetés  : 0
+Taux de rejet              : 0.0 %
+
+Lecture rapide :
+- le flux semble nominal : les compteurs principaux convergent.
+
+3) Services principaux
+----------------------
+kafka                    OK             cluster Kafka
+postgres                 OK             base PostgreSQL
+generator                OK             producteur de Pix
+pix-validator            OK             contrôle les messages raw
+pix-decision-engine      OK             décide valide ou rejet
+pix-outcome-publisher    OK             publie les réponses finales
+persister-valid          OK             persiste les Pix acceptés
+persister-rejected       OK             persiste les Pix rejetés
+service-health           OK             météo et pilotage
+grafana                  OK             dashboards
+
+4) Kafka : lag des groupes applicatifs
+--------------------------------------
+pix-validator            lag=0      à jour  groupe=simulpix-validator-1793706031
+pix-decision-engine      lag=0      à jour  groupe=simulpix-decision-engine-1793706031
+pix-outcome-publisher    lag=0      à jour  groupe=simulpix-outcome-publisher-1793706031
+persister-valid          lag=0      à jour  groupe=simulpix-persister-valid-1793706031
+persister-rejected       lag=0      à jour  groupe=simulpix-persister-rejected-1793706031
+
+5) État du flux courant
+-----------------------
+Scénario generator       : nominal
+Phase traffic shaper     : completed
+Progression phase        : 100 / 100
+Mode trafic              : bursty
+Sémantique PUB           : at_least_once
+Sémantique SUB           : at_least_once
+Perturbation réseau      : inactive
+
+6) Où regarder ensuite
+----------------------
+- détails Kafka pédagogiques : ./scripts/tp-kafka.sh
+- météo HTML                 : http://localhost:8082/
+- pilotage des TP            : http://localhost:8083/
+- Grafana                    : http://localhost:3000
+- JSON complet               : SIMULPIX_TP_STATUS_VERBOSE=1 ./scripts/tp-status.sh

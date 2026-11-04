@@ -1,0 +1,13 @@
+[OK  ] status ok ok
+[OK  ] aucune alerte 
+[OK  ] 100 generes 100
+[OK  ] 100 traites 100
+[OK  ] 100 valides 100
+[OK  ] 0 rejetes 0
+[OK  ] 100 outcome 100
+[OK  ] db_validated=100 100
+[OK  ] db_rejected=0 0
+[OK  ] gap valid 0 
+[OK  ] gap rejected 0 
+[OK  ] lag_total 0 partout {'pix-validator': 0, 'pix-decision-engine': 0, 'pix-outcome-publisher': 0, 'persister-valid': 0, 'persister-rejected': 0}
+[OK  ] sous-replication 0 partout {'kafka-1': 0, 'kafka-2': 0, 'kafka-3': 0}
