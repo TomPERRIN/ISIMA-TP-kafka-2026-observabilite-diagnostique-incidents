@@ -14,7 +14,8 @@
 | Plateforme opérationnelle | ✅ fait | `start.sh` OK, flux nominal validé (13/13) |
 | Formulation de la garantie | ✅ fait | Garantie #1 retenue, seuil 30 s justifié |
 | État des lieux des métriques | ✅ fait | Inventaire complet (§1-§4 + synthèse, pull 04/11) |
-| Conception du diagnostic | ⬜ à faire | Matrice symptôme / cause / vérification |
+| Matrice symptôme / cause / vérification | ✅ fait (v1) | `notes/matrice-symptomes-causes.md` — 5 lignes + classement probabilité/criticité, **manuelle** (commit `05c67db`) |
+| Automatisation de la matrice (le produit) | ⬜ à faire | Rendre les règles automatiques : métrique dérivée / alerte / vue / commande |
 | Incidents provoqués et mesurés | ⬜ à faire | Familles A, B, C + témoin nominal |
 | Livrables finaux | ⬜ à faire | Note de conception, protocole, guide |
 
@@ -69,6 +70,26 @@
 - `TODO-SAE5.md` §2 remplacé par un lien vers le plan ; sa Phase 2 fusionnée avec l'inventaire métriques.
 - **`travail/avancement.md`** (ce fichier) + **`travail/TODO.md`** (pilotage fusionné TODO-SAE5 + inventaire métriques).
 
+### 1.5 Matrice symptôme / cause probable / vérification (04/11/2026, commit `05c67db`)
+
+**`travail/notes/matrice-symptomes-causes.md` (v1)** — construite à partir de l'état des lieux, c'est la **spécification de la règle de diagnostic** :
+
+- **5 lignes de diagnostic** : chaque ligne = un symptôme vu en premier → 2 causes plausibles → la vérification qui tranche → le cas « indéterminé » :
+  1. **file d'attente qui grossit** (`pending_result_count`, lag ↑) → retard de lecture vs persistance ; trancher : quel groupe est en retard (`tp-kafka.sh`) + `persistence_gap_*` ;
+  2. **URP > 0** (tranches mal répliquées) → broker arrêté (grave) vs retard de copie (bénin) ; trancher : `offline_partitions_count` > 0 ou contrôleur = 0 → panne, sinon retard qui se résorbe seul ;
+  3. **plus aucune écriture en base** (`db_*` figé) → PostgreSQL indisponible vs amont arrêté ; trancher : `counts.generated` qui stagne → amont, qui monte sans écriture → PostgreSQL ;
+  4. **paiements trop lents** (`sla_breaches` ↑) → retard en amont vs délai trop court ; trancher : file longue au moment du dépassement → amont, file vide → délai trop court ;
+  5. **verdict `degraded`** → service down vs alerte grave ; trancher : `services.<nom>` + sonde indépendante.
+- **Témoin nominal** intégré (contrôle des faux positifs, référence 13/13) : `lag_total = 1` passager normal, léger écart de persistance normal en début de flux, alerte au nominal = faux positif.
+- **Procédure d'usage en 4 pas** pendant un incident : verdict → symptôme (1re colonne) → ligne de la matrice (toujours `tp-kafka.sh` ou `tp-db.sh`, jamais un dashboard seul) → cause nommée ou « indéterminé » explicite.
+- **⚠️ La matrice est manuelle** : la contribution attendue est de la rendre **automatique** (métrique dérivée / alerte / vue / commande), évaluée sur incidents provoqués.
+- **Classement probabilité / criticité ajouté** (04/11/2026) :
+  - échelles qualitatives : Probabilité {Élevée, Moyenne, Faible} × Criticité {Critique, Élevée, Moyenne, Faible} ;
+  - les 10 causes notées ligne par ligne avec **priorité d'examen** et justification par les mesures connues (rattrapage éclair = lag passager normal, `generated` qui stagne = fin de scénario normale, TTL 10 s, RF=3 / min ISR=2) ;
+  - règle de lecture : **écarter d'abord la cause la plus critique** quand sa vérification est peu coûteuse (les instantanés `tp-kafka.sh` / `tp-db.sh` le permettent), puis confirmer la cause la plus probable ;
+  - top 3 à surveiller : **PostgreSQL indisponible** (seule cause **Critique** du lot, perte durable) > **broker arrêté** (near-miss : à min ISR=2, un 2e incident rend les écritures impossibles) > **retard de lecture qui dure** (fréquent, devient impact SLA massif si non détecté dans les 30 s) ;
+  - ⚠️ hypothèses de travail : la Phase 4 transformera ces probabilités en fréquences **mesurées**.
+
 ---
 
 ## 2. Journal des décisions
@@ -81,6 +102,8 @@
 | 04/11/2026 | Plan d'architecture dans un fichier dédié (`docs/architecture/plan-architecture-sae5.md`) |
 | 04/11/2026 | Pilotage fusionné dans `travail/` : `avancement.md` + `TODO.md` |
 | 04/11/2026 | État des lieux **terminé** : inventaire métriques complet (pull `95556a5` + `a394db6`) — Phase 2 close |
+| 04/11/2026 | **Matrice symptôme / cause / vérification v1** (`05c67db`, auteur anayel) : 5 lignes de diagnostic, manuelle — à automatiser |
+| 04/11/2026 | **Classement probabilité / criticité** ajouté à la matrice : échelles qualitatives, priorité d'examen (critique d'abord si vérification rapide), top 3 = PostgreSQL > broker > retard qui dure — à valider en Phase 4 |
 
 ---
 
@@ -97,14 +120,14 @@
 
 ## 4. En cours
 
-Rien en cours — l'état des lieux (Phase 2) est terminé.
+Rien en cours — la matrice v1 est posée ; l'étape suivante est son automatisation (Phase 3).
 
 ---
 
 ## 5. Prochaines étapes
 
-1. Construire la **matrice symptôme / cause probable / vérification** → Phase 3 (s'appuyer sur les 3 ambiguïtés documentées dans la synthèse de l'inventaire).
-2. Concevoir le moteur de diagnostic (règles de croisement, 4 états, fraîcheur) → Phase 3.
-3. Scripter les 3 incidents + témoin, lancer la campagne de mesures → Phase 4.
+1. **Automatiser la matrice v1** : coder les 5 règles de croisement (métrique dérivée / alerte / vue / commande de diagnostic) → Phase 3.
+2. Intégrer le garde-fou fraîcheur (critère #6) et le test unitaire de la machine à états (critère #5) → Phase 3.
+3. Scripter les 3 incidents + témoin, lancer la campagne de mesures (justesse, délai ≤ 30 s, faux positifs) → Phase 4.
 4. Vérification croisée Kafka ↔ PostgreSQL sur chaque conclusion → Phase 5.
 5. Rédiger les livrables (note de conception, protocole, guide praticien) → Phase 6.

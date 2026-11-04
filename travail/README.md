@@ -28,6 +28,7 @@ trancher.
 
 - [x] Choix du sujet et mise en place du répertoire de travail.
 - [x] État des lieux des métriques d'observabilité existantes ([`notes/metriques-observabilite.md`](notes/metriques-observabilite.md)).
-- [ ] Conception du diagnostic (garantie visée, matrice symptôme / cause / vérification).
+- [x] Matrice symptôme / cause / vérification ([`notes/matrice-symptomes-causes.md`](notes/matrice-symptomes-causes.md), v1 manuelle).
+- [ ] Automatisation de la matrice (métrique dérivée, alerte, vue ou commande de diagnostic).
 - [ ] Incidents provoqués et mesurés.
 - [ ] Rédaction des livrables finaux (note de conception, protocole d'essai, guide de diagnostic).

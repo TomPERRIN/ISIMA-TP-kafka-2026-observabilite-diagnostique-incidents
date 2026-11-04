@@ -9,7 +9,7 @@
 ## Table des matières
 
 1. [Phase 2 — Terminer l'état des lieux ✅](#1-phase-2--terminer-létat-des-lieux-✅)
-2. [Phase 3 — Conception de l'outil de diagnostic](#2-phase-3--conception-de-loutil-de-diagnostic)
+2. [Phase 3 — Conception de l'outil de diagnostic](#2-phase-3--conception-de-loutil-de-diagnostic) (matrice ✅, automatisation ⬜)
 3. [Phase 4 — Automatisation des essais](#3-phase-4--automatisation-des-essais)
 4. [Phase 5 — Vérification croisée](#4-phase-5--vérification-croisée)
 5. [Phase 6 — Livrables et preuves](#5-phase-6--livrables-et-preuves)
@@ -41,15 +41,33 @@ Les enseignements clés pour la suite :
 
 ## 2. Phase 3 — Conception de l'outil de diagnostic
 
-**Objectif : définir la matrice symptôme/cause/vérification et concevoir l'apport concret (livrables de preuve attendus).**
+**Objectif : concevoir l'apport concret à partir de la matrice (livrables de preuve attendus).**
 **Garantie visée** (candidate #1, retenue) : « Notre lecture d'incident ne doit pas confondre retard de consommateur, réplication dégradée et panne de persistance, prouvé par une matrice validée sur incidents injectés : bonne cause retenue sur 100 % des cas connus, état "indéterminé" + vérification suivante sinon. »
 **Architecture cible** : voir [`docs/architecture/plan-architecture-sae5.md`](../docs/architecture/plan-architecture-sae5.md) §4 (moteur de diagnostic : garde-fou fraîcheur → règles de croisement → sortie à 4 états).
 
-- ⬜ Pour chaque famille d'incident (A, B, C), définir : **symptômes attendus**, **hypothèses de cause possibles**, **vérification suivante**.
-  - **(A) retard consommateur** : symptômes = lag ↑ sur les groupes applicatifs, backlog qui monte, sous-réplication = 0, DB converge après drainage ; hypothèses = consommateur ralenti vs perturbation réseau vs pic de charge ; vérification = `tp-kafka.sh` (offsets/groupes) + convergence finale.
-  - **(B) réplication dégradée** : symptômes = `under_replicated_partitions_total > 0`, broker offline, contrôleur absent ; hypothèses = broker arrêté vs lien réseau dégradé vs rééquilibrage ; vérification = `replication.brokers[]` + état des conteneurs kafka-1/2/3.
-  - **(C) persistance défaillante** : symptômes = `persistence_gap_*` stable après drainage, `db_*_count` ≠ compteurs métier, `seconds_since_last_*` qui croît ; hypothèses = persister ralenti vs PostgreSQL indisponible vs rejet en cascade ; vérification = `tp-db.sh` + contenu réel des tables.
-- ⬜ Construire la **MATRICE « symptôme / cause probable / vérification »** (livrable de preuve attendu) — s'appuyer sur les couples « à lire ensemble » sortis de l'inventaire §5.
+### 2.1 Matrice symptôme / cause probable / vérification ✅
+
+**✅ FAIT (pull 04/11/2026, commit `05c67db`)** — [`notes/matrice-symptomes-causes.md`](notes/matrice-symptomes-causes.md) (v1) :
+
+- **5 lignes de diagnostic** (symptôme vu en premier → 2 causes plausibles → comment trancher → cas indéterminé) :
+  1. file d'attente qui grossit → retard de lecture vs persistance (trancher via `tp-kafka.sh` : quel groupe est en retard ?) ;
+  2. URP > 0 → broker arrêté (grave) vs retard de copie (bénin) (trancher via `offline_partitions_count` / `active_controller_count`) ;
+  3. plus aucune écriture en base → PostgreSQL indisponible vs amont arrêté (trancher via `counts.generated` vs `seconds_since_last_validated`) ;
+  4. paiements trop lents (`sla_breaches`) → retard en amont vs délai trop court (trancher via lag par application + longueur de file) ;
+  5. verdict `degraded` → service down vs alerte grave (trancher via `services.<nom>` + sonde indépendante).
+- **Témoin nominal** intégré (contrôle des faux positifs, référence 13/13).
+- **Procédure d'usage pendant un incident** en 4 pas (verdict → symptôme → ligne de la matrice → cause nommée ou « indéterminé »).
+- **Classement probabilité / criticité** (ajout local 04/11/2026) :
+  - échelles qualitatives (Probabilité {Élevée, Moyenne, Faible} × Criticité {Critique, Élevée, Moyenne, Faible}) ;
+  - tableau ligne par ligne : les 10 causes notées avec **priorité d'examen** et justification fondée sur les mesures (rattrapage éclair, fin de scénario, TTL 10 s, RF=3/min ISR=2) ;
+  - règle de lecture : écarter d'abord la cause la plus **critique** si sa vérification est rapide (`tp-kafka.sh` / `tp-db.sh` = instantanés), puis confirmer la cause la plus **probable** ;
+  - **top 3 à surveiller** : PostgreSQL indisponible (seule cause critique) > broker arrêté (near-miss à min ISR=2) > retard de lecture qui dure (fréquent, impact SLA si > 30 s).
+
+**⚠️ La matrice est MANUELLE** : la contribution attendue est de la rendre **automatique** (voir 2.2).
+**⚠️ Probabilités = hypothèses de travail** : la Phase 4 les transformera en fréquences mesurées.
+
+### 2.2 Automatiser la matrice (le cœur de la contribution) ⬜
+
 - ⬜ Concevoir l'apport concret (au moins **un** parmi) :
   - une métrique dérivée ;
   - une alerte ;
@@ -58,11 +76,13 @@ Les enseignements clés pour la suite :
 
   Exigences du minimum :
   - couvrir les situations **A, B et C** (dont une dégradation **OU** une indisponibilité PostgreSQL) ;
-  - distinguer **automatiquement** au moins **2 causes plausibles d'un même symptôme** ;
+  - distinguer **automatiquement** au moins **2 causes plausibles d'un même symptôme** (la matrice v1 donne les 5 lignes à coder) ;
   - si les données ne permettent pas de trancher, afficher un état **« indéterminé »** + la vérification suivante à mener.
 - ⬜ Intégrer le **garde-fou fraîcheur** (critère #6) : âge max des mesures utilisées affiché à côté du diagnostic ; sondes périmées → « indéterminé », jamais une conclusion fausse.
 - ⬜ Prévoir une **vérification indépendante** de la cause (croiser offsets/API Kafka avec le contenu réel de PostgreSQL — `tp-kafka.sh` + `tp-db.sh` — pas seulement un graphique).
 - ⬜ Tester la machine à états par un **test unitaire** (critère #5 : toute conclusion ≠ indéterminé exige la double lecture Kafka ET PostgreSQL).
+- ⬜ Codifier les règles de la matrice v1 : chaque ligne (5 symptômes × 2 causes) devient une règle de croisement du moteur (voir architecture cible §4).
+- ⬜ Reporter le **classement probabilité / criticité** dans la sortie du moteur : présenter les causes dans l'ordre « priorité d'examen » (critique d'abord si vérification rapide), pas seulement « probable d'abord ».
 
 ---
 
