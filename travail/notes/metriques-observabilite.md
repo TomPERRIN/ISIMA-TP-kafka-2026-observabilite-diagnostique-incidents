@@ -95,9 +95,94 @@ Chaque alerte a un `kind` (son type) et un `level` (`warning` ou `error`).
 
 ## 2. Dashboards Grafana
 
-<!-- À remplir : les 4 dashboards provisionnés dans infra/observability/grafana/dashboards/
-     (simul-pix-incidents, simul-pix-kafka, simul-pix-persistence, simul-pix-pipeline) :
-     panneaux principaux, métriques sous-jacentes, seuils et alertes existants. -->
+### 2.0 Comment les dashboards sont alimentés
+
+Les dashboards ne lisent pas les services directement. La chaîne est :
+
+```
+service-health (météo) -> collect-metrics.sh (toutes les 10 s) -> base InfluxDB -> dashboards Grafana
+```
+
+Le collecteur (`infra/observability/scripts/collect-metrics.sh`, intervalle réglable par
+`SIMULPIX_OBS_INTERVAL_SECONDS`, 10 s par défaut) enregistre dans InfluxDB :
+
+| mesure InfluxDB | Contenu |
+|---|---|
+| `simulpix_platform` | les compteurs du pipeline (émis, traités, acceptés, refusés, écrits en base, file d'attente, écarts, latences, hors-délai...) |
+| `kafka_consumer_group` | le retard de chaque application, un point par groupe |
+| `kafka_topic` | le nombre de messages par topic |
+| `kafka_broker` | par broker : tranches mal répliquées, contrôleur actif, tranches hors ligne (lu via JMX sur les brokers) |
+| `kafka_replication_partition` | le retard de copie, tranche de topic par tranche (via JMX) |
+| `postgres_runtime` | lignes en base, connexions actives, taille, fraîcheur des écritures |
+| `simulpix_semantics` | la configuration du moment (acks, retries, mode commit, mode transactionnel...) |
+
+Conséquence pour nos essais : un incident peut aussi ralentir cette chaîne (service-health,
+collecteur ou InfluxDB). Dans ce cas les courbes **se figent sans le dire** : à vérifier
+pendant chaque incident.
+
+### 2.1 Dashboard `simul-pix-incidents`
+
+Le plus proche de notre sujet : rassemble les signaux d'incident.
+
+| Panneau | Ce qu'il montre | Remarque |
+|---|---|---|
+| Partitions applicatives sous-répliquées (stat) | le maximum de tranches mal répliquées sur la période affichée | garde le pic : utile car la fin d'un incident revient souvent au normal |
+| Lag de réplication par partition (courbe) | le retard de copie, tranche par tranche | signal principal d'une réplication dégradée |
+| Partitions indisponibles par broker (courbe) | les tranches devenues inaccessibles | signal plus grave que « mal répliqué » |
+| Contrôleur actif du cluster (courbe) | le nombre de contrôleurs Kafka (1 en temps normal) | 0 ou >1 = problème du cluster lui-même |
+| Décisions hors SLA par minute (courbe) | les paiements traités trop lentement | l'impact métier visible |
+
+### 2.2 Dashboard `simul-pix-kafka`
+
+Côté cluster et consommateurs. Plusieurs panneaux existent en version « max 5 min »,
+« max 30 min » et courbe temps réel — le max retient le pic même si l'incident est déjà fini.
+
+| Panneau | Ce qu'il montre |
+|---|---|
+| Partitions sous-répliquées — max 5 min / 30 min / courbe | le pic de tranches mal répliquées |
+| Lag consommateur — max 5 min / 30 min / courbe | le pic de retard des applications |
+| Ancienneté backlog — max 5 min / 30 min / courbe | le pic d'ancienneté de la file d'attente |
+| Retard par étapes générales (courbe) | le retard, application par application, sur une même courbe |
+| Volume observé par topic (courbe) | le nombre de messages par topic dans le temps |
+| Partitions offline, contrôleur actif (courbes) | l'état de santé du cluster |
+| Acks actifs, retries actifs, commit SUB, auto commit, étapes en transaction (stats) | la configuration Kafka du moment (utile pour savoir dans quel mode l'essai a tourné) |
+| Résultats finaux logiques vs offset technique (stats) | compare le résultat vu par l'application et le compteur brut du topic |
+
+### 2.3 Dashboard `simul-pix-persistence`
+
+Tout ce qui concerne PostgreSQL — le dashboard à regarder pour la 3e situation de la mission.
+
+| Panneau | Ce qu'il montre | Remarque |
+|---|---|---|
+| Écarts Kafka => BDD (courbe + stats actuel / 5 min / 30 min) | les paiements traités mais pas encore écrits en base, pour les acceptés et les refusés | le signal « persistance qui ne suit plus » ; stats en max, donc garde le pic |
+| Débit d'écriture PostgreSQL (courbe, lignes/s) | le rythme d'écriture en base | une écriture qui tombe à 0 pendant que le flux continue = alerte |
+| Temps moyen des dernières écritures (courbe) | le délai entre l'événement Pix et son écriture en base | — |
+| Décisions SLA / hors SLA (courbe) | les paiements dans les temps et hors délai | — |
+| PostgreSQL — valides / rejetés (stats total / 5 min / 30 min) | le nombre de lignes en base, en cumul et par fenêtre | la version « par fenêtre » montre si ça bouge pendant l'essai |
+| BDD — taille, taille des 2 tables (stats) | le volume occupé | secondaire pour notre sujet |
+
+### 2.4 Dashboard `simul-pix-pipeline` (général)
+
+La vue d'ensemble du flux, utile pour le témoin nominal.
+
+| Panneau | Ce qu'il montre |
+|---|---|
+| Volumes cumulés du pipeline (courbe) | émis, traités, acceptés, refusés, écrits — superposés : les écarts entre courbes sautent aux yeux |
+| Débits du pipeline (courbe, msg/s) | le rythme à chaque étape |
+| Pix acceptés ou rejetés / s (courbe) | les décisions en temps réel |
+| Temps moyen de validation d'un Pix sur 1 minute (courbe) | le délai de traitement |
+| Pix rejetés pour dépassement du TTL / s (courbe) | les paiements trop lents |
+| Longueur de la file d'attente (courbe) | les paiements en attente de décision |
+| Stats émis / traités / acceptés / rejetés — 5 min, 30 min, période affichée | les volumes par fenêtre |
+
+### 2.5 Ce qui manque, visible dès cet état des lieux
+
+- Les dashboards **affichent les mêmes données que la météo**, mais sous forme de courbes et
+  de max par fenêtre. Aucun ne croise les signaux : on peut voir « retard » sur un panneau et
+  « écriture en retard » sur un autre sans qu'un lien soit fait entre les deux.
+- Le dashboard `incidents` rassemble les bons signaux mais reste une **somme d'indicateurs** :
+  il ne dit pas « c'est une réplication dégradée » ou « c'est la persistance », c'est au lecteur
+  d'interpréter — exactement l'ambiguïté que notre contribution doit lever.
 
 ## 3. Scripts `tp-kafka.sh`
 
