@@ -186,15 +186,156 @@ La vue d'ensemble du flux, utile pour le témoin nominal.
 
 ## 3. Scripts `tp-kafka.sh`
 
-<!-- À remplir : informations lisibles via scripts/tp-kafka.sh (offsets, lag, réplication, ...). -->
+Script à lancer depuis la racine : `./scripts/tp-kafka.sh`. Il interroge Kafka en direct
+(via le broker `kafka-1`), donc **sans passer par la météo ni Grafana** : c'est notre
+vérification indépendante. Sortie en 4 parties :
+
+### 3.1 Les topics applicatifs
+
+Pour chaque topic, une ligne : nombre de tranches, facteur de réplication, rôle.
+
+```
+simulpix.transactions.raw        Pix émis par generator
+simulpix.transactions.checked    Pix contrôlés par pix-validator
+simulpix.transactions.decision   Décisions publiées par pix-decision-engine
+simulpix.transactions.validated  Pix acceptés
+simulpix.transactions.rejected   Pix rejetés / topic de rejet métier
+simulpix.transactions.retry      Messages republiés pour rejeu
+simulpix.transactions.outcome    Réponses finales client
+```
+
+`partitions=6` : jusqu'à 6 lecteurs du même groupe peuvent travailler en parallèle.
+`replication=3` : chaque tranche est copiée sur les 3 brokers. Si `replication` passe
+sous 3 dans la sortie, c'est un signal de dégradation du cluster.
+
+### 3.2 Tous les topics visibles dans le cluster
+
+Liste brute de tout ce que le cluster contient (y compris les topics internes).
+
+### 3.3 Les 5 groupes de lecteurs (consumer groups)
+
+Pour chaque application, un tableau par topic : position de lecture, fin du topic, retard.
+
+| Groupe | Rôle |
+|---|---|
+| validator | lit raw et retry, publie checked |
+| decision-engine | lit checked, publie validated / rejected / decision |
+| outcome-publisher | lit decision, publie outcome |
+| persister-valid | lit validated, persiste les Pix acceptés |
+| persister-rejected | lit rejected, persiste les Pix rejetés |
+
+Pour chaque ligne, la colonne « lecture » résume la situation :
+
+- `à jour` : le groupe a tout lu (LAG=0) ;
+- `retard à traiter` : LAG>0, des messages attendent d'être lus ;
+- `offset non initialisé sur N partition(s)` : rien n'a encore été committé, souvent une
+  partition vide ou pas encore utilisée — à ne pas confondre avec un retard.
+
+Le détail brut est disponible avec `SIMULPIX_TP_KAFKA_VERBOSE=1 ./scripts/tp-kafka.sh`.
+
+### 3.4 Ce que ce script apporte pour nos essais
+
+- **Vérification indépendante** : il lit Kafka directement, donc permet de confirmer (ou
+  d'infirmer) ce qu'annoncent la météo et les dashboards — exigence de la mission.
+- **Vue par application** : contrairement au lag global des dashboards, on voit *quelle*
+  application est en retard (validator ? persister-valid ?), ce qui discrimine déjà un
+  retard de lecture d'un problème d'écriture en base.
+- **Limites** : c'est un instantané à la main (pas d'historique) ; il ne montre pas le retard
+  de réplication (il faut passer par JMX/les dashboards pour ça) ; il ne montre rien sur
+  PostgreSQL — pour la 3e situation, il faut `tp-db.sh`.
 
 ## 4. Scripts `tp-db.sh`
 
-<!-- À remplir : informations lisibles via scripts/tp-db.sh (compteurs PostgreSQL, doublons,
-     écritures, ...). -->
+Script à lancer depuis la racine : `./scripts/tp-db.sh`. Il interroge PostgreSQL en direct
+(psql sur le conteneur), donc **sans passer par la météo ni Grafana** : c'est la vérification
+indépendante pour la 3e situation de la mission. Sortie :
+
+```sql
+select count(*) as validated_count from validated_transactions;
+select count(*) as rejected_count from rejected_transactions;
+select rejection_reason, count(*) as occurrences
+from rejected_transactions
+group by rejection_reason
+order by occurrences desc, rejection_reason asc;
+```
+
+Trois résultats :
+
+1. le nombre total de paiements **acceptés** en base (table `validated_transactions`) ;
+2. le nombre total de paiements **refusés** en base (table `rejected_transactions`) ;
+3. la liste des **motifs de refus**, du plus fréquent au moins fréquent
+   (par exemple `processing_timeout` quand un paiement a été traité trop lentement).
+
+### 4.1 Ce qu'il y a dans les deux tables
+
+- `validated_transactions` : un paiement accepté y est enregistré avec son `transaction_id`
+  (identifiant unique), l'heure de l'événement, le délai accordé (`decision_sla_seconds`),
+  le temps effectif de traitement (`decision_latency_ms`) et s'il a été traité dans les temps
+  (`decision_within_sla`).
+- `rejected_transactions` : un refus y est enregistré avec son motif (`rejection_reason`),
+  le même suivi de délai, le message d'origine complet (`original_payload`) et une empreinte
+  unique (`rejection_fingerprint`) qui empêche d'enregistrer deux fois le même refus.
+
+### 4.2 Ce que ce script apporte pour nos essais
+
+- **Vérification indépendante côté données** : les chiffres viennent de la base elle-même,
+  pas des compteurs des services — c'est ce qui permet de confirmer qu'un paiement a
+  réellement été enregistré (règle du sujet : ne jamais conclure depuis Kafka seul).
+- **Les motifs de refus aident au diagnostic** : par exemple, un `processing_timeout` massif
+  indique que des paiements ont dépassé leur délai (typique d'un retard de consommateur),
+  alors que des refus métier (`invalid_*`) indiquent autre chose.
+- **Limites** : les compteurs sont des **totaux depuis le tout début** — pour mesurer un essai,
+  il faut noter la valeur avant de lancer le scénario, ou travailler en différence.
+  Le script ne montre pas la fraîcheur des écritures (dernier enregistrement) ni les
+  connexions : ces informations sont dans la météo (`timings.seconds_since_last_*`) et
+  le dashboard persistence.
 
 ## Synthèse
 
-<!-- À remplir : ce qui manque pour distinguer les trois incidents de la mission
-     (retard consommateur / réplication dégradée / persistance PostgreSQL),
-     ambiguïtés observées entre signaux. -->
+### Ce qu'on a en résumé
+
+| Source | Ce qu'elle apporte | Vérification indépendante ? |
+|---|---|---|
+| Météo `service-health` | l'état des services, les compteurs, les alertes, l'état réseau | non : elle lit Kafka et PostgreSQL elle-même |
+| Dashboards Grafana | les mêmes mesures en courbes, avec historique et max par fenêtre | non : elles lisent la base InfluxDB alimentée par la météo |
+| `tp-kafka.sh` | topics, réplication, retard par application | **oui** : interroge Kafka en direct |
+| `tp-db.sh` | lignes en base, motifs de refus | **oui** : interroge PostgreSQL en direct |
+
+### Les ambiguïtés observées entre signaux
+
+- **Un retard consommateur et une dégradation de persistance se ressemblent** : dans les deux
+  cas la file d'attente (`pending_result_count`, lag) grossit et le débit de sortie baisse.
+  Les signaux qui les séparent existent bien — le retard vu par application (`tp-kafka.sh`,
+  `consumer_groups`), l'écart de persistance (`persistence_gap_*`), les motifs de refus
+  (`processing_timeout` dans `tp-db.sh`) — mais **rien ne les croise automatiquement**.
+- **Une réplication dégradée ressemble à une panne de cluster** : des tranches mal répliquées
+  (URP>0) peuvent venir d'un broker arrêté (grave) ou d'un simple retard de copie passager
+  (bénin). Les signaux `offline_partitions` et `active_controller_count` permettent de
+  trancher, mais ne sont affichés qu'à côté, sans règle de décision.
+- **Les alertes se déclenchent indépendamment** : `kafka_lag`, `persistence_gap_valid`,
+  `oldest_lag` peuvent sonner en même temps pour un seul et même incident, ou inversement
+  une seule alerte sonner pour deux problèmes distincts. Aucune alerte ne dit « cause
+  probable » ni « vérification suivante ».
+- **Le verdict « indéterminé » n'existe pas** : quand les données ne permettent pas de
+  trancher (par exemple générateur arrêté, donc plus de débit pour estimer l'ancienneté),
+  le système n'a pas de réponse explicite — il reste simplement silencieux.
+
+### Ce qui manque pour la mission (notre matière première)
+
+Pour les trois situations à distinguer :
+
+1. **Retard consommateur** : les signaux existent (lag par application, file d'attente,
+   ancienneté), il manque une règle qui les combine et pointe l'application en faute.
+2. **Réplication dégradée** : les signaux existent (URP, retard de copie, état des brokers),
+   il manque une règle qui sépare « broker arrêté » de « copie en retard ».
+3. **Persistance PostgreSQL** : les signaux existent (écarts de persistance, débit
+   d'écriture, fraîcheur, `processing_timeout` en base), il manque une règle qui distingue
+   « PostgreSQL ne suit plus » d'un simple retard consommateur en amont.
+
+En plus : la **fraîcheur des sondes** n'est exposée nulle part alors que la mission demande
+de la vérifier (le système d'observation peut être affecté par l'incident), et un témoin
+nominal automatisé n'existe pas (les scénarios `nominal` se lancent à la main).
+
+C'est exactement l'espace de notre contribution : **une règle ou un outil qui croise les
+signaux existants pour donner un diagnostic nommé, avec sa vérification indépendante et son
+cas « indéterminé » explicite.**
