@@ -16,6 +16,8 @@ trancher.
 
 ## Organisation
 
+- [`avancement.md`](avancement.md) — ce qui est fait : résultats, décisions, pièges connus.
+- [`TODO.md`](TODO.md) — ce qu'il reste à faire : pilotage fusionné du suivi global et de l'inventaire métriques.
 - [`notes/`](notes/) — tout ce qu'on trouve : métriques existantes, docs utiles, idées, trucs
   intéressants.
 - [`essais/`](essais/) — tout ce qu'on teste : comment on a provoqué un incident, ce que ça a
@@ -25,7 +27,7 @@ trancher.
 ## Avancement
 
 - [x] Choix du sujet et mise en place du répertoire de travail.
-- [ ] État des lieux des métriques d'observabilité existantes.
+- [x] État des lieux des métriques d'observabilité existantes ([`notes/metriques-observabilite.md`](notes/metriques-observabilite.md)).
 - [ ] Conception du diagnostic (garantie visée, matrice symptôme / cause / vérification).
 - [ ] Incidents provoqués et mesurés.
 - [ ] Rédaction des livrables finaux (note de conception, protocole d'essai, guide de diagnostic).
