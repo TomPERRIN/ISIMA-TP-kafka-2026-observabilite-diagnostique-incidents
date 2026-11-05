@@ -131,6 +131,7 @@ Le plus proche de notre sujet : rassemble les signaux d'incident.
 | Partitions indisponibles par broker (courbe) | les tranches devenues inaccessibles | signal plus grave que « mal répliqué » |
 | Contrôleur actif du cluster (courbe) | le nombre de contrôleurs Kafka (1 en temps normal) | 0 ou >1 = problème du cluster lui-même |
 | Décisions hors SLA par minute (courbe) | les paiements traités trop lentement | l'impact métier visible |
+| Aide de lecture (texte) | rappel des ordres de grandeur et de l'interprétation | documentation, pas une métrique |
 
 ### 2.2 Dashboard `simul-pix-kafka`
 
@@ -139,9 +140,10 @@ Côté cluster et consommateurs. Plusieurs panneaux existent en version « max 5
 
 | Panneau | Ce qu'il montre |
 |---|---|
-| Partitions sous-répliquées — max 5 min / 30 min / courbe | le pic de tranches mal répliquées |
-| Lag consommateur — max 5 min / 30 min / courbe | le pic de retard des applications |
-| Ancienneté backlog — max 5 min / 30 min / courbe | le pic d'ancienneté de la file d'attente |
+| Partitions sous-répliquées — période affichée / max 5 min / 30 min / courbe | le pic de tranches mal répliquées |
+| Lag consommateur — période affichée / max 5 min / 30 min / courbe (via « Retard par étapes générales ») | le pic de retard des applications |
+| Ancienneté backlog — période affichée / max 5 min / 30 min (3 stats, pas de courbe dédiée) | le pic d'ancienneté de la file d'attente |
+| Retard de réplication (courbe) | le retard de copie côté cluster, distinct du lag applicatif |
 | Retard par étapes générales (courbe) | le retard, application par application, sur une même courbe |
 | Volume observé par topic (courbe) | le nombre de messages par topic dans le temps |
 | Partitions offline, contrôleur actif (courbes) | l'état de santé du cluster |
@@ -183,6 +185,15 @@ La vue d'ensemble du flux, utile pour le témoin nominal.
 - Le dashboard `incidents` rassemble les bons signaux mais reste une **somme d'indicateurs** :
   il ne dit pas « c'est une réplication dégradée » ou « c'est la persistance », c'est au lecteur
   d'interpréter — exactement l'ambiguïté que notre contribution doit lever.
+
+### 2.6 Vérification de cet inventaire contre la configuration réelle
+
+Inventaire relu panneau par panneau contre les 4 JSON provisionnés
+(`infra/observability/grafana/dashboards/*.json`) le 05/11/2026 : contenu conforme,
+écarts corrigés dans les sections 2.1 et 2.2 (panneau « Aide de lecture » ajouté,
+courbe « Retard de réplication » et variantes « période affichée » listées,
+précision sur l'absence de courbe dédiée pour l'« Ancienneté backlog »).
+Vérification : Madiak5.
 
 ## 3. Scripts `tp-kafka.sh`
 
