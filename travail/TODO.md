@@ -122,17 +122,20 @@ est **différée après la campagne d'essais phase 4** — le moteur ne modifie 
 
 **Objectif : scripter les incidents + le témoin, et mesurer les critères de la garantie (justesse, délai ≤ 30 s, faux positifs, fraîcheur).**
 
-- ⬜ **Scripter l'injection des 3 incidents** :
-  - **(A) retard consommateur** : `./scripts/run-scenario.sh consumer_lag` ou `./scripts/network-perturb.sh <profil> <service>` ;
-  - **(B) réplication dégradée** : `./scripts/run-scenario.sh replication_lag` (arrêt temporaire d'un broker) ;
-  - **(C) incident PostgreSQL** : dégradation (`SIMULPIX_PERSIST_VALID_DELAY_MS` / `SIMULPIX_PERSIST_REJECTED_DELAY_MS`) ou indisponibilité (`docker stop postgres`).
-- ⬜ Ajouter un essai **NOMINAL témoin** (contrôle des faux positifs — critère #4 : 0 alerte sur ≥ 5 nominaux).
-- ⬜ Automatiser l'enchaînement : scénarios + collecte des relevés (commandes + sorties horodatées), **rejouable par un autre groupe** (critère #8).
-- ⬜ Mesurer pour tout diagnostic déterminé :
-  - **justesse** du diagnostic (bonne cause identifiée — critère #1 : 100 % des cas connus) ;
-  - **délai de détection** (injection → alerte — critère #3 : ≤ 30 s) ;
-  - **taux de faux positifs** (critère #4).
-- ⬜ Vérifier la **fraîcheur des sondes** : injecter un incident sur le système d'observation lui-même (arrêt `metrics-collector`, gel du `history`) et vérifier que le diagnostic bascule en « indéterminé » (critère #6).
+- ✅ **Scripter l'injection des 3 incidents** (`scripts/diagnostic-campaign.sh`) :
+  - **(A) retard consommateur** : `consumer_lag` (décision 400 ms, persisters 0 ms) → **`consumer_backlog/reader_backlog` en 15 s** ✅
+  - **(B) réplication dégradée** : `replication_lag` (kafka-3 arrêté 20 s) → **`kafka_replication/replication_catchup` en 25 s** ✅ (le délai inclut le cycle de rafraîchissement du snapshot réplication ~20-30 s — cohérent avec le budget de la garantie)
+  - **(C) incident PostgreSQL** : les deux modes faits — dégradation (persisters 350 ms) → **`persister_slow` en 14 s** ✅ ; indisponibilité (`docker compose stop postgres` 40 s) → **`service_down:postgres` (famille persistence) en 3 s** ✅
+- ✅ Ajouter un essai **NOMINAL témoin** (contrôle des faux positifs — critère #4) : **0 faux positif sur 5 témoins, 70 échantillons, 100 % `healthy`** ✅
+- ✅ Automatiser l'enchaînement : scénarios + collecte des relevés (verdicts horodatés `verdicts.jsonl`, évènements `events.jsonl`, sorties scénario) — **rejouable par un autre groupe** : protocole dans [`notes/protocole-campagne-phase4.md`](notes/protocole-campagne-phase4.md), rapport via `scripts/lib/campaign_report.py` (critère #8) ✅
+- ✅ Mesurer pour tout diagnostic déterminé :
+  - **justesse** du diagnostic — critère #1 : **4/4 incidents** → la bonne famille nommée chez les 3 (relevés `preuves/phase4-campagne-2026-11-05/SYNTHESE.md`) ✅
+  - **délai de détection** (injection → alerte) — critère #3 : **max 25 s ≤ 30 s** ✅
+    (A 15 s ; B 25 s ; C-dégradé 14 s ; C-indispo 3 s)
+  - **taux de faux positifs** — critère #4 : **0/70 échantillons** ✅
+- 🟡 (partiel) Vérifier la **fraîcheur des sondes** (critère #6) : en live, l'indisponibilité du service observé est relevée `unreachable` et ne produit JAMAIS de conclusion ; le cas `probes_stale` (payload vieilli 300 s → `indeterminate`) est couvert par le test unitaire. Arrêter `metrics-collector` ne gèle PAS `/health/details` (le `timestamp` est ré-émis à chaque requête, cf. protocole « limites »).
+
+**Bilan seuils du moteur** : tenus sans recalibration (lag 10, écart qui S'ACCROÎT ≥ 5, big-gap 20, fraîcheur 75 s, span ≥ 10 s). Leçon d'outil : la cadence du relevé doit être ≥ 10 s sinon les règles à delta restent à `needs_second_sample` (v1 à 5 s archivée dans `archives-rec5s/` du répertoire de campagne).
 
 ---
 

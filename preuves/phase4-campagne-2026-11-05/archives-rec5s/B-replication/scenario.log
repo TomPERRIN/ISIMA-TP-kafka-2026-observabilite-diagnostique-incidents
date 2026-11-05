@@ -1,0 +1,117 @@
+[simulpix] stopping application services
+ Container pix-outcome-publisher  Stopping
+ Container persister-rejected  Stopping
+ Container pix-validator  Stopping
+ Container pix-decision-engine  Stopping
+ Container persister-valid  Stopping
+ Container service-health  Stopping
+ Container persister-rejected  Stopped
+ Container pix-validator  Stopped
+ Container service-health  Stopped
+ Container pix-traffic-shaper  Stopping
+ Container pix-outcome-publisher  Stopped
+ Container pix-decision-engine  Stopped
+ Container persister-valid  Stopped
+ Container pix-traffic-shaper  Stopped
+ Container generator  Stopping
+ Container pix-scenario-planner  Stopping
+ Container pix-scenario-planner  Stopped
+ Container generator  Stopped
+[simulpix] removing stopped/orphaned application containers
+[simulpix] resetting scenario state
+[simulpix] ensuring dependencies are up
+ Container postgres  Running
+ Container kafka-1  Running
+ Container kafka-3  Running
+ Container kafka-2  Running
+[simulpix] truncating PostgreSQL tables
+[simulpix] resetting Kafka topics
+[simulpix] restarting application services
+ Container pix-scenario-planner  Creating
+ Container pix-validator  Creating
+ Container persister-valid  Creating
+ Container pix-decision-engine  Creating
+ Container pix-outcome-publisher  Creating
+ Container generator  Creating
+ Container persister-rejected  Creating
+ Container pix-validator  Created
+ Container persister-valid  Created
+ Container pix-scenario-planner  Created
+ Container pix-decision-engine  Created
+ Container pix-outcome-publisher  Created
+ Container persister-rejected  Created
+ Container generator  Created
+ Container pix-traffic-shaper  Creating
+ Container pix-traffic-shaper  Created
+ Container service-health  Creating
+ Container service-health  Created
+ Container generator  Starting
+ Container persister-valid  Starting
+ Container pix-scenario-planner  Starting
+ Container persister-rejected  Starting
+ Container pix-validator  Starting
+ Container pix-outcome-publisher  Starting
+ Container pix-decision-engine  Starting
+ Container generator  Started
+ Container pix-scenario-planner  Started
+ Container pix-traffic-shaper  Starting
+ Container pix-decision-engine  Started
+ Container pix-validator  Started
+ Container pix-outcome-publisher  Started
+ Container persister-rejected  Started
+ Container persister-valid  Started
+ Container pix-traffic-shaper  Started
+ Container service-health  Starting
+ Container service-health  Started
+[simulpix] scenario state reset
+[simulpix] service health: http://localhost:8082/health
+[simulpix] persisting current run state
+[simulpix] recreating consumers with run-specific groups
+ Container persister-valid  Creating
+ Container pix-outcome-publisher  Creating
+ Container pix-validator  Creating
+ Container persister-rejected  Creating
+ Container service-health  Creating
+ Container pix-decision-engine  Creating
+ Container pix-outcome-publisher  Created
+ Container persister-valid  Created
+ Container pix-validator  Created
+ Container service-health  Created
+ Container pix-decision-engine  Created
+ Container persister-rejected  Created
+ Container pix-validator  Starting
+ Container persister-valid  Starting
+ Container pix-outcome-publisher  Starting
+ Container pix-decision-engine  Starting
+ Container service-health  Starting
+ Container persister-rejected  Starting
+ Container pix-outcome-publisher  Started
+ Container persister-rejected  Started
+ Container pix-decision-engine  Started
+ Container persister-valid  Started
+ Container pix-validator  Started
+ Container service-health  Started
+[simulpix] replication lag will stop broker kafka-3 after generator startup for 20s
+[simulpix] starting workshop flow scenario=replication_lag total=600 rate=20
+ Container kafka-2  Running
+ Container kafka-3  Running
+ Container pix-scenario-planner  Creating
+ Container kafka-1  Running
+ Container generator  Creating
+ Container pix-scenario-planner  Created
+ Container generator  Created
+ Container pix-traffic-shaper  Creating
+ Container pix-traffic-shaper  Created
+ Container pix-scenario-planner  Starting
+ Container generator  Starting
+ Container pix-scenario-planner  Started
+ Container generator  Started
+ Container pix-traffic-shaper  Starting
+ Container pix-traffic-shaper  Started
+[simulpix] stopping broker kafka-3 for 20s to create replication lag
+ Container kafka-3  Stopping
+ Container kafka-3  Stopped
+[simulpix] generator publisher and pix-traffic-shaper launched
+[simulpix] groups: simulpix-validator-1793885551 / simulpix-decision-engine-1793885551 / simulpix-outcome-publisher-1793885551 / simulpix-persister-valid-1793885551 / simulpix-persister-rejected-1793885551
+[simulpix] delays(ms): decision_engine=0 valid=0 rejected=0
+[simulpix] replication outage: broker=kafka-3 duration=20s

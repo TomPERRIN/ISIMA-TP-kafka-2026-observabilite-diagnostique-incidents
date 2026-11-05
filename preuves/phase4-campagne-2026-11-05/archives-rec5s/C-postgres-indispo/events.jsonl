@@ -1,0 +1,7 @@
+{"t_epoch":1793885742,"event":"case_start","detail":"./scripts/run-scenario.sh nominal 800 15"}
+{"t_epoch":1793885742,"event":"scenario_launch","detail":"run-scenario.sh ./scripts/run-scenario.sh nominal 800 15"}
+{"t_epoch":1793885807,"event":"scenario_ready","detail":"t_launch=1793885742"}
+{"t_epoch":1793885818,"event":"fault_injected","detail":"docker compose stop postgres (40s)"}
+{"t_epoch":1793885861,"event":"fault_recovered","detail":"docker compose start postgres"}
+{"t_epoch":1793885862,"event":"platform_ok_after_recovery","detail":""}
+{"t_epoch":1793885929,"event":"case_end","detail":"window=115s"}

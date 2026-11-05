@@ -1,0 +1,4 @@
+{"t_epoch":1793886217,"event":"case_start","detail":"env SIMULPIX_PROCESSING_DELAY_MS_OVERRIDE=400 SIMULPIX_PERSIST_VALID_DELAY_MS_OVERRIDE=0 SIMULPIX_PERSIST_REJECTED_DELAY_MS_OVERRIDE=0 ./scripts/run-scenario.sh consumer_lag 600 20"}
+{"t_epoch":1793886217,"event":"scenario_launch","detail":"run-scenario.sh env SIMULPIX_PROCESSING_DELAY_MS_OVERRIDE=400 SIMULPIX_PERSIST_VALID_DELAY_MS_OVERRIDE=0 SIMULPIX_PERSIST_REJECTED_DELAY_MS_OVERRIDE=0 ./scripts/run-scenario.sh consumer_lag 600 20"}
+{"t_epoch":1793886284,"event":"scenario_ready","detail":"t_launch=1793886217"}
+{"t_epoch":1793886413,"event":"case_end","detail":"window=115s"}

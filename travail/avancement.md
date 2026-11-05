@@ -2,7 +2,7 @@
 
 > Fichier de suivi d'avancement détaillé (ce qui est fait, résultats, décisions).
 > Les tâches restantes sont pilotées dans [`TODO.md`](TODO.md).
-> Dernière mise à jour : 2026-11-04.
+> Dernière mise à jour : 2026-11-05.
 
 ---
 
@@ -15,8 +15,9 @@
 | Formulation de la garantie | ✅ fait | Garantie #1 retenue, seuil 30 s justifié |
 | État des lieux des métriques | ✅ fait | Inventaire complet (§1-§4 + synthèse, pull 04/11) |
 | Matrice symptôme / cause / vérification | ✅ fait (v1) | `notes/matrice-symptomes-causes.md` — 5 lignes + classement probabilité/criticité, **manuelle** (commit `05c67db`) |
-| Automatisation de la matrice (le produit) | ✅ fait (05/11) | `scripts/diagnose.sh` + moteur `scripts/lib/diagnose_engine.py` (4 états + 26 test units) — couverture A/B/C, double lecture, fraîcheur ; vue HTTP différée (phase 4) |
-| Incidents provoqués et mesurés | ⬜ à faire | Familles A, B, C + témoin nominal |
+| Automatisation de la matrice (le produit) | ✅ fait (05/11) | `scripts/diagnose.sh` + moteur `scripts/lib/diagnose_engine.py` (4 états + 26 tests unitaires) — couverture A/B/C, double lecture, fraîcheur ; vue HTTP différée |
+| Incidents provoqués et mesurés | ✅ fait (05/11) | Campagne phase 4 (`scripts/diagnostic-campaign.sh`) : **justesse 4/4, délai max 25 s, 0 FP sur 5 témoins** — `preuves/phase4-campagne-2026-11-05/` |
+| Vérification croisée + non-confusion (phase 5) | ⬜ à faire | Chaque conclusion vs Kafka ET PostgreSQL ; démo backlog ≠ rejet ≠ perte |
 | Livrables finaux | ⬜ à faire | Note de conception, protocole, guide |
 
 ---
@@ -136,9 +137,46 @@ consolidée ci-dessous dans le journal.
   lag 132 à 1 lecture → **indeterminate/needs_second_sample** ; re-lecture 11,2 s plus tard
   → **retard de consommateur (A) / `reader_backlog` avec 2 lectures** — cohérent avec la
   garantie (≤ 30 s) ; `probes_stale` confirmé sur un payload vieilli de 300 s.
-- 🟡 Reste à calibrer en phase 4 sur la plateforme réelle : seuil de fraîcheur exact, tailles
-  de seuils sur incidents provoqués (les fixtures unitaires sont synthétiques), et la
-  démonstration des essais (justesse/délai/faux positifs).
+- ✅ Calibration faite en phase 4 (voir §1.7) : les seuils (fraîcheur 75 s, lag 10,
+  gap 5/20, span ≥ 10 s) sont **tenus sans recalibration** sur la plateforme réelle ; les
+  fixtures unitaires restent synthétiques mais les mesures live ont validé les comportements.
+
+### 1.7 Campagne d'incidents provoqués — phase 4 (05/11/2026)
+
+L'outil : `scripts/diagnostic-campaign.sh` (+ `scripts/lib/compact_verdict.py` pour le
+relevé JSONL horodaté, `scripts/lib/campaign_report.py` pour l'analyse). Protocole
+rejouable documenté dans [`notes/protocole-campagne-phase4.md`](notes/protocole-campagne-phase4.md)
+(critère #8). Chaque cas : lancement du scénario, relevés du moteur toutes les 11 s
+(`verdicts.jsonl`), journal d'évènements horodatés (`events.jsonl`), sortie scénario.
+
+**Résultats** (`preuves/phase4-campagne-2026-11-05/SYNTHESE.md`) :
+
+| Cas | Injection | Événement concluant | Famille attendue | Délai | PASS |
+|---|---|---|---|---|---|
+| temoin-1..5 | aucune | 5×0 FP (`healthy` sur 70 échantillons) | — | — | ✅ critère #4 |
+| A-retard-lecture | `consumer_lag` décision 400 ms/pers 0 | `reader_backlog` (lag 326 ≥ 10) | consumer_backlog | **15 s** | ✅ #1/#3 |
+| B-replication | `replication_lag` kafka-3 out 20 s | `replication_catchup` (URP=86, offline=0, contrôleur actif, 3/3 brokers) | kafka_replication | **25 s** | ✅ #1/#3 |
+| C-postgres-indispo | `docker compose stop postgres` 40 s | `service_down:postgres` (famille persistence) | persistence | **3 s** | ✅ #1/#3 |
+| C-postgres-degrade | `consumer_lag` pers 350 ms/décision 0 | `persister_slow` (**écart S'ACCROÎT 3 → 319** en 2 lectures) | persistence | **14 s** | ✅ #1/#3 |
+
+- **Critères de la garantie tous tenus** : justesse **4/4** (#1), délai **max 25 s ≤ 30 s**
+  (#3), faux positifs **0/70** (#4). Le discriminateur « écart qui S'ACCROÎT » (conçu
+  mardi) a fonctionné en direct sur C-dégradé.
+- **Seuils du moteur validés sans recalibration** : lag 10, gap_step 5, big_gap 20,
+  fraîcheur 75 s, span ≥ 10 s.
+- **Timing B instructif** : l'arrêt du broker s'est produit pendant la latence d'armement
+  du relevé ; la détection (25 s) inclut le cycle de rafraîchissement du snapshot
+  réplication de la météo (~20-30 s) — exactement le budget que la garantie ≤ 30 s avait
+  fondé sur des mesures réelles (collecteur 10 s, history 5,7-12,3 s). Le moteur a par
+  ailleurs bien distingué *broker tous présent, offline=0, contrôleur actif* → retard de
+  copie (probable), pas une panne.
+- **Leçon d'outil — cadence de relevé ≥ 10 s** : la campagne v1 relevait toutes les 5 s,
+  sous le span minimal du moteur (2 échantillons ≥ 10 s) : les règles à delta (A, C-dégradé)
+  restaient à `indeterminate/needs_second_sample` (fusible anti-lag-éclair, pas un bug
+  moteur). Relevés v1 archivés dans `archives-rec5s/`, campagne relancée à 11 s → 4/4.
+- Le comportement dégradé du système d'observation (critère #6) est couvert : service
+  injoignable → relevés `unreachable`, jamais une conclusion ; `probes_stale` verrouillé
+  par test unitaire (arrêter `metrics-collector` ne gèle pas `/health/details`, cf. protocole).
 
 ---
 
@@ -158,6 +196,8 @@ consolidée ci-dessous dans le journal.
 | 05/11/2026 | Architecture du moteur : **module pur `scripts/lib/diagnose_engine.py` + CLI `scripts/diagnose.sh`**, PAS d'intégration dans `service-health` (rebuild image à chaque itération pénaliserait la campagne) ; vue HTTP/panneau différée après la phase 4 |
 | 05/11/2026 | Sortie du moteur à **4 états + healthy** avec cause nommée, `plausible_causes[]` ordonnée par priorité d'examen, `evidence[]` double lecture, garde-fou fraîcheur 75 s, 2 échantillons ≥ 10 s pour les deltas |
 | 05/11/2026 | **Moteur écrit + 26 tests OK** ; essai CLI bout en bout validé hors plateforme (fixtures du payload nominal de référence) ; campagne live (phase 4) en attente de Docker/WSL réactivé |
+| 05/11/2026 | **Campagne phase 4 tournée** (`scripts/diagnostic-campaign.sh` + rapport) : justesse **4/4**, délai **max 25 s**, faux positifs **0/70** sur 5 témoins ; discriminateur « écart qui S'ACCROÎT » validé en direct (3 → 319) ; seuils tenus sans recalibration |
+| 05/11/2026 | Cadence de relevé fixée à **11 s** (≥ span moteur 10 s) : la v1 à 5 s bloquait les règles à delta sur `needs_second_sample` — relevés v1 archivés (`archives-rec5s/`), protocole documentant la quantification du délai (`notes/protocole-campagne-phase4.md`) |
 
 ---
 
@@ -174,24 +214,22 @@ consolidée ci-dessous dans le journal.
 
 ## 4. En cours
 
-Rien en cours — le moteur de diagnostic est posé et testé (Phase 3 close). L'étape suivante
-est la campagne d'essais (Phase 4), bloquée en live tant que Docker n'est pas ré-intégré à
-WSL (settings Docker Desktop → Resources → WSL integration → Ubuntu).
+Rien en cours — la phase 4 (campagne d'incidents provoqués) est close : les critères de la
+garantie #1 sont mesurés et tenus (justesse 4/4, délai max 25 s, 0 faux positif). L'étape
+suivante est la vérification croisée (Phase 5).
 
 ---
 
 ## 5. Prochaines étapes
 
-1. **Campagne d'essais** (Phase 4) : scripter les 3 incidents (A/B/C) + témoin nominal dans
-   `scripts/diagnostic-campaign.sh`, lancer la campagne ;
-   mesurer **justesse** (critère #1 : 100 % des cas connus), **délai de détection**
-   (critère #3 : ≤ 30 s), **faux positifs** (critère #4 : 0 sur ≥ 5 nominaux), et
-   calibrer les seuils du moteur (fraîcheur 75 s, lag 10, gap 5) sur la plateforme réelle.
-2. **Vérification croisée** (Phase 5) : chaque conclusion contre Kafka ET PostgreSQL
-   (`tp-kafka.sh`, `tp-db.sh`) ; démonstration non-confusion backlog/rejet métier/perte
-   (candidate de garantie #2).
-3. **Livrables** (Phase 6) : guide praticien (`docs/operations/guide-diagnostic.md`), note
-   de conception (`docs/architecture/diagnostic-engine-design.md`), relevés dans `preuves/`.
-4. vue HTTP/panneau Grafana du moteur — uniquement **après** la campagne (rebuilds
-   d'images = temps perdu pendant les essais, cf. décision 05/11).
+1. **Vérification croisée** (Phase 5) : chaque conclusion du moteur contre Kafka ET
+   PostgreSQL (`tp-kafka.sh`, `tp-db.sh`, contenu des tables) ; démonstration de
+   **non-confusion** backlog consommateur ≠ rejet métier ≠ perte de données
+   (candidate de garantie #2) — essai de preuve prévu : scénario `errors_simple`
+   (rejets métier attendus) comparé à un incident de persistance.
+2. **Livrables** (Phase 6) : guide praticien (`docs/operations/guide-diagnostic.md`,
+   recette pas à pas `diagnose.sh` + `tp-kafka.sh` + `tp-db.sh`), note de conception
+   (`docs/architecture/diagnostic-engine-design.md`), relevés déjà en place dans `preuves/`.
+3. Vue HTTP/panneau Grafana du moteur — uniquement **après** la phase 5 (décision 05/11 :
+   aucun rebuild d'image pendant les boucles d'essai).
 
