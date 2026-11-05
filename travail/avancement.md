@@ -252,6 +252,16 @@ doublée côté praticien (guide §10) et côté conception (note §9) ; les lim
 en campagne (collecteur arrêté ne gèle pas le payload ; délai B inclut le snapshot
 réplication ; aucune perte provoquable) y sont citées avec leur source.
 
+**Relecture croisée des deux documents (05/11)** — corrections issues de la vérification
+dans le code : (1) traitement d'un service down précisé — cause conclusive
+`service_down:<nom>` pour un service **à famille** (c'est ainsi que C est détecté en 3 s),
+`indeterminate/service_down_transversal` pour un service transversal,
+`indeterminate/probe_blinded` pendant une perturbation réseau (sonde potentiellement
+aveuglée, croiser l'indépendante + `docker ps`) ; (2) timeline d'A-draine calée sur les
+horodatages réels (pause du relevé 113→247 s pendant l'attente de fermeture de
+`cross-check.sh`) ; (3) entrées du pipeline et table des seuils clarifiées (clé d'env
+vs valeur par défaut, `PREVIOUS_MAX_AGE` = âge de l'échantillon précédent du cache).
+
 Avec phases 2-5 closes, les preuves attendues du sujet sont toutes couvertes : matrice
 (`notes/matrice-symptomes-causes.md`), relevés ≥ 3 situations + témoin
 (`preuves/phase4-…`, `preuves/phase5-…`), amélioration exploitée (`diagnose.sh`),
@@ -282,6 +292,7 @@ démonstration de non-confusion (`SYNTHESE.md` phase 5), guide reproductible.
 | 05/11/2026 | Enregistreur de verdicts **mutualisé** (`scripts/lib/record-verdicts.sh`, campagne phase 4 refactorée dessus) ; bug `REPO_DIR` à un cran corrigé (v1 : 100 % `unreachable`) |
 | 05/11/2026 | **Phase 6 (livrables) écrite** : guide praticien + note de conception (seuils justifiés par les mesures) ; la « conclusion » est double : guide §10 (praticien) + note §9 (conception), incluant le résultat négatif « aucune perte provoquable, les persisters rejouent » |
 | 05/11/2026 | Vue HTTP/panneau Grafana du moteur **définitivement différée** indiquée dans le livrable (décision phase 4 maintenue) ; la CLI est le produit |
+| 05/11/2026 | **Relecture croisée guide + note de conception** : imprécision corrigée sur le service down (conclusif pour un service à famille, `transversal`/`probe_blinded` sinon — vérifié dans le code), timeline A calée sur les horodatages, table des seuils clarifiée |
 
 ---
 

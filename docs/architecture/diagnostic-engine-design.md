@@ -35,16 +35,21 @@
 
 ```text
 payload /health/details          ──►  GARDE-FOU FRAÎCHEUR      ──►  RÈGLES DE CROISEMENT    ──►  VERDICT
-(counts, gaps, timings, rate,         (âge payload ET âge du         5 lignes de la matrice,       4 états + healthy
- details.services, details.kafka,      snapshot réplication ;       2 échantillons espacés
- services, alerts)                     ≥ 75 s → probes_stale)       pour les règles à delta
+(counts, rates, timings, gaps,        (âge payload ET âge de       5 lignes de la matrice,      4 états + healthy
+ details.kafka, details.postgres,      l'instantané réplication ;  2 échantillons espacés
+ services, alerts)                     ≥ 75 s → probes_stale)      pour les règles à delta
 ```
 
 Ordre et garde-fous, tels que codés :
 
 - **Fraîcheur d'abord** (critère #6) : sondes périmées → `indeterminate/probes_stale`,
-  JAMAIS une conclusion. La panne peut éteindre le système qui la voit : l'indispo d'un
-  service est relevée `unreachable` et n'autorise aucune inférence sur sa famille.
+  JAMAIS une conclusion. Inversement, un service **à famille** (postgres, kafka,
+  persisters, lecteurs) qui ne répond plus est une cause conclusive
+  (`service_down:<nom>` — c'est ainsi que C a été détecté en 3 s) ; les deux autres
+  cas n'inventent rien : service **transversal** down →
+  `indeterminate/service_down_transversal` (simple témoin), service down **pendant
+  une perturbation réseau active** → `indeterminate/probe_blinded` (la sonde peut être
+  aveuglée, pas le service — trancher sur la sonde indépendante + `docker ps`).
 - **Anti « lag éclair »** : toute conclusion sur un compteur qui monte exige 2
   échantillons espacés ≥ 10 s (`span < 10 s → "relire encore"`). Motivation mesurée :
   un lag de 1 en nominal est NORMAL (rattrapage éclair) ; la v1 à 5 s ne terminait
@@ -132,14 +137,14 @@ fraîcheur détectables restent celles du snapshot réplication et de l'activit�
 
 ## 6. Justification des seuils (tous réglables via `SIMULPIX_DIAG_*`)
 
-| Seuil | Défaut | Justification (mesures) |
+| Seuil | Clé (suffixe de `SIMULPIX_DIAG_*`) | Justification (mesures) |
 |---|---|---|
 | âge max des sondes (75 s) | `MAX_PROBE_AGE_SECONDS` | cadence réelle du collecteur ~20 s, rafraîchissement `history` 5,7–12,3 s mesurés : 75 s ≈ 3–4 cycles d'écart |
 | lag total d'incident (10) | `LAG_TOTAL_THRESHOLD` | lag éclair nominal = 1 ; incident A monté à 325–517 : le seuil 10 sépare nettement |
 | gros écart immédiat (20) | `BIG_GAP_THRESHOLD` | un écart de persistance ≥ 20 déclenche déjà la ligne « persisters en retard » sans attendre leur lag — à UNE lecture, ça reste une hypothèse (`needs_second_sample`) |
 | pas de S'ACCROÎT (5) | `GAP_STEP` | l'écart doit gagner ≥ 5 en un span pour conclure `persister_slow` — mesure C-dégradé : 3 → 319, aucun doute |
 | span minimal (10 s) | `MIN_SAMPLE_SPAN` | anti lag éclair (2 lectures trop proches ne disent rien) ; v1 à 5 s restait bloquée en `needs_second_sample` |
-| âge max de la 1re lecture (900 s) | `PREVIOUS_MAX_AGE_SECONDS` | au-delà de 15 min, pas de delta : éviter des comparaisons d'époques sans lien |
+| âge max de l'échantillon précédent (900 s) | `PREVIOUS_MAX_AGE_SECONDS` | au-delà de 15 min, le cache n'est pas une série fiable : pas de delta entre époques sans lien |
 | brokers attendus (3) | `EXPECTED_BROKERS` | RF=3 / min ISR=2 : `broker_count < 3` déclenche déjà le chemin grave (`broker_down`), sans attendre offline>0 |
 | marge latence / SLA (0.8) | `SLA_LATENCY_MARGIN` | SLA de décision 10 s (matrice ligne 4) : affichée en preuve (`latence vs SLA, marge 80 %`) pour aider à trancher retard amont vs délai trop court |
 

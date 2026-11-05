@@ -120,9 +120,10 @@ Ce qui se passe (relevé réel, cadence 11 s) :
 |---|---|---|
 | 0 | `indeterminate` (`needs_second_sample`) | lag déjà 325 mais UNE seule lecture : le moteur refuse de trancher (anti lag éclair) |
 | 11 | `consumer_backlog` / `reader_backlog` | « Lag de lecture persistant/montant (325 ≥ seuil 10) » |
-| 22-110 | `consumer_backlog` ×9 | pic de lag 517 puis drainage progressif |
-| ~140 | `indeterminate` (`ambiguous_sla`) | transition : SLA en hausse avec file déjà vide |
-| 150+ | `healthy` | fin de scénario expliquée (`upstream_stopped_normal`) |
+| 22-113 | `consumer_backlog` ×9 | pic de lag 517 puis drainage progressif |
+| 113-247 | — (pause du relevé) | `cross-check.sh` attend la fermeture (sondage 10 s) avant de reprendre le relevé en fin de drainage |
+| 247 | `indeterminate` (`ambiguous_sla`) | transition : SLA en hausse avec file déjà vide |
+| 258-281 | `healthy` ×3 | fin de scénario expliquée (`upstream_stopped_normal`) |
 
 Retranchement attendu : `tp-kafka.sh` montre le **groupe lecteur** en retard
 (`pix-decision-engine` ici), la chaîne en aval est à jour. À la fermeture, la base a
@@ -180,16 +181,21 @@ attendue, précieuse**. Raisons cataloguées :
 | Raison | Signification | Vérification suivante |
 |---|---|---|
 | `needs_second_sample` | une seule lecture : aucun delta possible | relire à ~15 s (`--watch 15`) |
-| `probes_stale` | sondes périmées (> 75 s) : le système d'observation peut être en panne | vérifier la collecte, re-lire |
+| `probes_stale` | sondes périmées (> 75 s) : le système d'observation peut être en panne | vérifier la collecte, relire |
 | `data_missing` | champ attendu absent du payload | vérifier la sonde / le socle |
 | `contradictory_signals` | la logique se contredit entre sources | relire ; lire tp-kafka/tp-db à la main |
 | `ambiguous_sla` | SLA en hausse avec file vide et latence OK | relire à ~15 s, lire `latency` + `sla_breaches` |
-| `ambiguous_non_dominated` | aucun dominateur de cause plausible | attendre, relire (du mouvement tranche) |
-| `probe_blinded` / `service_down_transversal` | la panne éteint le système qui la voit | re-démarrer la sonde [1] |
+| `ambiguous_non_dominated` | aucune cause dominante | attendre, relire (du mouvement tranche) |
+| `probe_blinded` [1] | service down PENDANT une perturbation réseau active : la sonde peut être aveuglée, pas le service | croiser `tp-kafka.sh`/`tp-db.sh` + `docker ps`, relire |
+| `service_down_transversal` [1] | service **sans famille** (hors pipeline) qui ne répond plus | relire ; noter comme témoin |
 
-[1] Ex. `stop metrics-collector` ne gèle PAS `/health/details` (le timestamp est ré-émis
-à chaque requête) et l'indisponibilité du service observé est relevée comme `unreachable`
-du côté des sondes de service : jamais une conclusion, toujours « indéterminé ».
+[1] Trois cas distincts, tels que codés dans le moteur : un service **à famille**
+(postgres, kafka, persisters, lecteurs) hors service est une cause conclusive
+(`service_down:<nom>` — c'est ainsi que C est détecté en 3 s) ; un service
+**transversal** est un simple témoin (`indeterminate/service_down_transversal`) ;
+et aucun service down n'est retenu pendant une perturbation réseau active
+(`indeterminate/probe_blinded` : la sonde peut être aveuglée, pas le service —
+trancher avec `tp-kafka.sh`/`tp-db.sh` + `docker ps`).
 
 ---
 
@@ -229,7 +235,7 @@ par `cross-check.sh`) :
 
 ```bash
 # phase 4 — incidents + témoin nominal, mesures de garantie (SYNTHESE.md à la fin)
-./scripts/diagnostic-campaign.sh          # ~40 min ; preuves dans preuves/phase4-…/
+./scripts/diagnostic-campaign.sh          # ~30 min ; preuves dans preuves/phase4-…/
 
 # phase 5 — croisement Kafka/PG + démonstration de non-confusion (4 cas)
 ./scripts/cross-check.sh                  # ~25 min ; preuves dans preuves/phase5-…/
@@ -266,8 +272,9 @@ backlog, rejet métier attendu et perte de données** (`cross-check.sh` 4/4).
 
 **Couvert** : les 3 situations A/B/C + la variante « persister lent » ; la cause nommée
 avec probabilité/criticité et ordre d'examen ; l'état `indeterminate` justifié avec la
-vérification suivante ; le garde-fou de fraîcheur (jamais de conclusion sur sondes âgées,
-y compris quand l'incident éteint le système d'observation) ; la vérification
+vérification suivante ; le garde-fou de fraîcheur (sondes âgées → `probes_stale`,
+rien ne conclut ; sonde potentiellement aveuglée par une perturbation réseau →
+`probe_blinded`, on croise la sonde indépendante) ; la vérification
 indépendante pointée dans chaque verdict ; le délai de détection garanti (B inclut le
 cycle lent de rafraîchissement du snapshot réplication, mesuré pendant la campagne).
 
