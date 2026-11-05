@@ -265,6 +265,73 @@ class DiagnoseEngineTest(unittest.TestCase):
         self.assertEqual(v["verdict"], "indeterminate")
         self.assertEqual(v["indeterminate_reason"], "ambiguous_sla")
 
+    # ---------- candidate #7 : impact métier (bloc business_impact) ----------
+
+    def test_business_impact_zero_when_nominal(self):
+        # témoin nominal : le bloc est présent, total 0, pas de delta (1 seule lecture)
+        v = verdict(base_payload(T0), now=T0)
+        impact = v["business_impact"]
+        self.assertEqual(impact["total_sla_breaches"], 0)
+        self.assertIsNone(impact["delta_sla_breaches"])
+        self.assertIn("Aucun Pix", impact["label"])
+        self.assertIn("./scripts/tp-db.sh", impact["independent_check"])
+
+    def test_business_impact_counts_breaches_during_incident(self):
+        # candidate #7 : pendant un incident, le verdict quantifie l'impact métier
+        p0 = with_lag(base_payload(T0), reader=300)
+        counts(p0, validated_sla_breaches=0, rejected_sla_breaches=560)
+        p1 = with_lag(base_payload(T0), reader=325)
+        counts(p1, validated_sla_breaches=0, rejected_sla_breaches=580)
+        v = verdict(p1, now=T0 + SPAN, previous=previous_of(p0, T0 + SPAN))
+        self.assertEqual(v["verdict"], "consumer_backlog")
+        self.assertEqual(v["cause"], "reader_backlog")
+        impact = v["business_impact"]
+        self.assertEqual(impact["total_sla_breaches"], 580)
+        self.assertEqual(impact["rejected_sla_breaches"], 580)
+        self.assertEqual(impact["validated_sla_breaches"], 0)
+        self.assertIn("580 Pix", impact["label"])
+        self.assertIn("rejet", impact["label"])
+
+    def test_business_impact_delta_between_two_samples(self):
+        p0 = base_payload(T0 - SPAN)
+        counts(p0, rejected_sla_breaches=100)
+        p1 = base_payload(T0)
+        counts(p1, rejected_sla_breaches=580)
+        v = verdict(p1, now=T0, previous=previous_of(p0, T0))
+        impact = v["business_impact"]
+        self.assertEqual(impact["total_sla_breaches"], 580)
+        self.assertEqual(impact["delta_sla_breaches"], 480)
+        self.assertIn("+480", impact["label"])
+
+    def test_business_impact_present_even_on_indeterminate(self):
+        # l'impact est FACTUEL : il s'affiche aussi quand la cause reste indéterminée
+        # (ici ambiguous_sla : ne pas conclure sur la cause n'empêche pas de mesurer)
+        p0 = base_payload(T0 - SPAN)
+        counts(p0, rejected_sla_breaches=100)
+        p1 = base_payload(T0)
+        counts(p1, rejected_sla_breaches=105)
+        v = verdict(p1, now=T0, previous=previous_of(p0, T0))
+        self.assertEqual(v["verdict"], "indeterminate")
+        self.assertEqual(v["indeterminate_reason"], "ambiguous_sla")
+        self.assertEqual(v["business_impact"]["delta_sla_breaches"], 5)
+
+    def test_business_impact_absent_when_counters_missing(self):
+        p = base_payload(T0)
+        del p["metrics"]["counts"]["validated_sla_breaches"]
+        del p["metrics"]["counts"]["rejected_sla_breaches"]
+        v = verdict(p, now=T0)
+        self.assertIsNone(v["business_impact"])
+
+    def test_business_impact_none_when_probes_stale(self):
+        # fraîcheur d'abord : sondes périmées -> aucun impact mentionné
+        p = base_payload(T0)
+        counts(p, rejected_sla_breaches=580)
+        p["timestamp"] = _iso(T0 - 600.0)
+        v = verdict(p, now=T0)
+        self.assertEqual(v["verdict"], "indeterminate")
+        self.assertEqual(v["indeterminate_reason"], "probes_stale")
+        self.assertIsNone(v["business_impact"])
+
     # ---------- ligne 5 : verdict degraded ----------
 
     def test_reader_service_down_named(self):

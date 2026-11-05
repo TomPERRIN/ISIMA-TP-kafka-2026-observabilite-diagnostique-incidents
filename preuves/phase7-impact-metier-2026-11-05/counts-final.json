@@ -1,0 +1,1 @@
+{"generated":300,"validated":22,"rejected":278,"outcome_count":300,"raw_topic_end_offsets":300,"db_validated_count":22,"db_rejected_count":278,"validated_sla_breaches":0,"rejected_sla_breaches":278,"pg_validated_sla_breaches":0,"pg_rejected_sla_breaches":278,"persistence_gap_valid":0,"persistence_gap_rejected":0,"lag_max":0,"payload_timestamp":"2026-11-05T16:48:20.098818+00:00"}

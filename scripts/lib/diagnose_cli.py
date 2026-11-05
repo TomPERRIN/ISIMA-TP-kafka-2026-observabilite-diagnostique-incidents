@@ -104,6 +104,12 @@ def render_text(verdict: Dict[str, Any]) -> str:
         lines.append("résumé    : %s" % verdict["summary"])
     for note in verdict.get("notes") or []:
         lines.append("note      : %s" % note)
+    impact = verdict.get("business_impact")
+    if impact:
+        lines.append("impact    : %s" % impact.get("label"))
+        check = impact.get("independent_check")
+        if check:
+            lines.append("            vérification en base : %s" % check)
     if verdict.get("plausible_causes"):
         lines.append("causes plausibles (ordre « priorité d'examen » de la matrice) :")
         for entry in verdict["plausible_causes"]:

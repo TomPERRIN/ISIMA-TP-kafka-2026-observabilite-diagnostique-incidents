@@ -1,0 +1,145 @@
+{
+ "generated_by": "scripts/impact-metier-proof.sh + scripts/lib/impact_report.py",
+ "scenario": {
+  "type": "consumer_lag",
+  "messages": 300,
+  "rate": 20
+ },
+ "instants": {
+  "t0": {
+   "verdict": "healthy",
+   "cause": "upstream_stopped_normal",
+   "indeterminate_reason": null,
+   "samples": 2,
+   "span_s": 12.55,
+   "moteur": {
+    "total": 0.0,
+    "delta": 0.0,
+    "validated": 0.0,
+    "rejected": 0.0,
+    "label": "Aucun Pix n'a dépassé le SLA de décision de 10 s (aucun dépassement compté en base)"
+   },
+   "payload_metrics_counts": {
+    "validated": 0,
+    "rejected": 0
+   },
+   "payload_details_pg": {
+    "validated": 0,
+    "rejected": 0
+   },
+   "sql": {
+    "validated_breaches": 0,
+    "rejected_breaches": 0,
+    "rejection_reasons": {
+     "amount_must_be_positive": 75,
+     "beneficiary_tax_pix_mismatch": 75,
+     "invalid_initial_status": 75,
+     "missing_beneficiary_tax_id": 75
+    }
+   }
+  },
+  "pendant_1": {
+   "verdict": "indeterminate",
+   "cause": null,
+   "indeterminate_reason": "needs_second_sample",
+   "samples": 1,
+   "span_s": null,
+   "moteur": {
+    "total": 105.0,
+    "delta": null,
+    "validated": 0.0,
+    "rejected": 105.0,
+    "label": "105 Pix ont dépassé le SLA de décision de 10 s — 105 rejet(s) métier « délai dépassé » (cette donnée est persistée, pas perdue)"
+   },
+   "payload_metrics_counts": {
+    "validated": 0,
+    "rejected": 106
+   },
+   "payload_details_pg": {
+    "validated": 0,
+    "rejected": 106
+   },
+   "sql": {
+    "validated_breaches": 0,
+    "rejected_breaches": 102,
+    "rejection_reasons": {
+     "processing_timeout": 104
+    }
+   }
+  },
+  "pendant_2": {
+   "verdict": "indeterminate",
+   "cause": null,
+   "indeterminate_reason": "needs_second_sample",
+   "samples": 1,
+   "span_s": null,
+   "moteur": {
+    "total": 245.0,
+    "delta": null,
+    "validated": 0.0,
+    "rejected": 245.0,
+    "label": "245 Pix ont dépassé le SLA de décision de 10 s — 245 rejet(s) métier « délai dépassé » (cette donnée est persistée, pas perdue)"
+   },
+   "payload_metrics_counts": {
+    "validated": 0,
+    "rejected": 246
+   },
+   "payload_details_pg": {
+    "validated": 0,
+    "rejected": 246
+   },
+   "sql": {
+    "validated_breaches": 0,
+    "rejected_breaches": 239,
+    "rejection_reasons": {
+     "processing_timeout": 244
+    }
+   }
+  },
+  "final": {
+   "verdict": "healthy",
+   "cause": "upstream_stopped_normal",
+   "indeterminate_reason": null,
+   "samples": 2,
+   "span_s": 12.44,
+   "moteur": {
+    "total": 278.0,
+    "delta": 0.0,
+    "validated": 0.0,
+    "rejected": 278.0,
+    "label": "278 Pix ont dépassé le SLA de décision de 10 s — 278 rejet(s) métier « délai dépassé » (cette donnée est persistée, pas perdue)"
+   },
+   "payload_metrics_counts": {
+    "validated": 0,
+    "rejected": 278
+   },
+   "payload_details_pg": {
+    "validated": 0,
+    "rejected": 278
+   },
+   "sql": {
+    "validated_breaches": 0,
+    "rejected_breaches": 278,
+    "rejection_reasons": {
+     "processing_timeout": 278
+    }
+   }
+  },
+  "sql_pre_delta": {
+   "validated_breaches": 0,
+   "rejected_breaches": 278,
+   "rejection_reasons": {
+    "processing_timeout": 278
+   }
+  }
+ },
+ "checks": {
+  "moteur_total_equals_sql_final": true,
+  "sonde_socle_equals_sql_final": true,
+  "moteur_equals_sonde_socle_final": true,
+  "delta_controle_zero_apres_fermeture": true,
+  "sql_stable_apres_fermeture": true,
+  "delta_controle_reproduit_par_sql": true
+ },
+ "checks_ok": true
+}

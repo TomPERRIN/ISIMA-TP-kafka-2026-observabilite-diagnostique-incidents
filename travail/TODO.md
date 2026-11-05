@@ -13,7 +13,7 @@
 3. [Phase 4 — Automatisation des essais ✅](#3-phase-4--automatisation-des-essais-✅)
 4. [Phase 5 — Vérification croisée ✅](#4-phase-5--vérification-croisée-✅)
 5. [Phase 6 — Livrables et preuves ✅](#5-phase-6--livrables-et-preuves-✅)
-6. [Phase 7 — Extension (si temps)](#6-phase-7--extension-si-temps)
+6. [Phase 7 — Extensions ✅ (impact métier)](#6-phase-7--extensions-✅-impact-métier-implémenté-le-05112026)
 7. [Phase 8 — Dimension théorique](#7-phase-8--dimension-théorique)
 8. [Phase 9 — Rendu GitHub](#8-phase-9--rendu-github)
 9. [Phase 0/1 — Restes d'organisation](#9-phase-01--restes-dorganisation)
@@ -213,10 +213,24 @@ preuves dans `preuves/phase5-croisee-2026-11-05/`.
 
 ---
 
-## 6. Phase 7 — Extension (si temps)
+## 6. Phase 7 — Extensions ✅ (impact métier implémenté le 05/11/2026)
 
-- 🎁 Comparer seuils **fixes** à une détection **adaptative** ; une règle explicite justifiée et évaluée suffit pour le minimum, l'apprentissage machine n'est pas exigé.
-- 🎁 Candidate #7 (impact métier) : champ « impact métier » par incident (X Pix dépassent le SLA de décision de 10 s, issu des compteurs `*_sla_breaches`), vérifiable en base.
+- ✅ **Candidate #7 (impact métier)** implémentée et prouvée :
+  - bloc `business_impact` dans le verdict (`diagnose_engine.py` rebuild : total,
+    delta contrôlé, répartition validés-tardifs/rejets-TTL, phrase métier, vérification
+    `tp-db.sh`) + affichage humain (ligne `impact`) + cache/CLI inchangés ;
+  - source = compteurs `validated/rejected_sla_breaches` comptés EN base
+    (`probes.py`, colonnes `decision_within_sla`) — le moteur croise, il n'invente rien ;
+  - tests : 26 → **32 tests unitaires OK** (nominal 0, comptage pendant incident,
+    delta, présent sur `indeterminate`, absent si données manquantes, `null` sur
+    sondes périmées) ;
+  - preuve live rejouable : `scripts/impact-metier-proof.sh` +
+    `scripts/lib/impact_report.py` → `preuves/phase7-impact-metier-2026-11-05/`
+    (SYNTHESE.md) : **6/6 checks** — moteur 278 == sonde PG 278 == SQL 278,
+    delta contrôlé 0 == 0 à l'état fermé, total montant (13 → 238) puis stabilisé ;
+    rejets métier « dans le SLA » jamais comptés comme dépassements.
+- 🎁 **Laissées en réserve** (note de conception §10) : détection adaptative
+  (seuils fixes réglables `SIMULPIX_DIAG_*`) ; vue HTTP / panneau Grafana.
 
 ---
 

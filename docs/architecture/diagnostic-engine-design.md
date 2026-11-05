@@ -79,6 +79,13 @@ Ordre et garde-fous, tels que codés :
   `CAUSE_TABLE`) : la cause la plus **critique** d'abord si sa vérification est rapide
   (tp-kafka/tp-db sont instantanés). L'ordre complet est reflété par
   `plausible_causes[]` (status `confirmed | probable | excluded | hypothesis`).
+- **Bloc factuel d'impact métier** (phase 7, candidate de garantie #7) : après les
+  règles, `build_verdict` attache `business_impact` — « X Pix dépassent le SLA de
+  décision », issu des compteurs `validated/rejected_sla_breaches` comptés EN BASE par
+  la sonde PostgreSQL du socle (colonnes `decision_within_sla`) — à tout verdict à
+  sondes fraîches, sans toucher à la branche-cause ; `null` sur `probes_stale`/
+  `data_missing`. Le delta entre 2 lectures obéit aux mêmes garde-fous (span ≥ 10 s,
+  aucun delta entre deux époques).
 
 ---
 
@@ -94,6 +101,7 @@ Ordre et garde-fous, tels que codés :
 | `indeterminate_reason` | raison cataloguée (§5) | le cas indéterminé |
 | `next_check[]` | vérifications suivantes CONCRÈTES (tp-kafka.sh/tp-db.sh, relire à 15 s) | jamais un dashboard seul |
 | `based_on` | `{samples, span_s}` | certification que le verdict repose sur N lectures espacées |
+| `business_impact` (phase 7) | `{total, delta, répartition validés-tardifs/rejets-TTL, sla_seconds, label, independent_check}` | l'impact métier chiffré, vérifiable en base (preuve 6/6, §8) |
 | `summary`, `notes[]` | explication, situation normale nommée (ex. fin de scénario) | lisibilité du praticien |
 
 ---
@@ -165,9 +173,12 @@ mécanique des trois réalités : backlog résorbé ≠ rejet TTL persisté ≠ 
 
 ## 8. Tests et preuves
 
-- **26 tests unitaires** : `cd scripts/lib && python3 -m unittest test_diagnose_engine`
+- **32 tests unitaires** : `cd scripts/lib && python3 -m unittest test_diagnose_engine`
   — chaque ligne × 2 causes, témoin nominal (0 FP : lag éclair, rattrapage, idle
-  résiduel), probes_stale, lectures manquantes, reset, priorités, sérialisation.
+  résiduel), probes_stale, lectures manquantes, reset, priorités, sérialisation,
+  **et 6 tests du bloc `business_impact`** (nominal 0, comptage pendant incident,
+  delta inter-échantillons, présent sur `indeterminate`, absent si données
+  manquantes, `null` sur sondes périmées).
 - **Campagne phase 4** (`preuves/phase4-campagne-2026-11-05/SYNTHESE.md`) : justesse
   **4/4**, délai **max 25 s ≤ 30 s** (A 15 s ; B 25 s — inclut le cycle de
   rafraîchissement du snapshot réplication ; C-lent 14 s ; C-indispo 3 s), faux
@@ -175,6 +186,14 @@ mécanique des trois réalités : backlog résorbé ≠ rejet TTL persisté ≠ 
 - **Croisé phase 5** (4/4 PASS) : chaque conclusion retranchée par Kafka et PostgreSQL
   en direct ; le discriminateur « écart qui S'ACCROÎT » validé en direct (3 → 319) ;
   rejets métier (300 en PG) ≠ incident ; fermeture activée sur les 4 cas.
+- **Impact métier (phase 7, `preuves/phase7-impact-metier-2026-11-05/`)** : scénario
+  `consumer_lag 300 @ 20/s` rejoué avec confrontation moteur ⇄ sonde-PG ⇄ SQL direct
+  à 5 instants (t0 / pendant ×2 / final) — moteur **278** == base **278** (rejets
+  100 % `processing_timeout`), delta contrôlé moteur **0** == variation SQL **0**
+  à l'état fermé, total montant pendant l'incident (13 → 238) puis immobilisé après
+  la fermeture : **6/6 checks**. En prime : les 300 rejets métier « dans le SLA » de
+  l'essai errors_simple ne comptent PAS comme dépassements — le compteur ne s'embrase
+  que sur de vrais TTL bloqués.
 
 ---
 
@@ -184,10 +203,15 @@ mécanique des trois réalités : backlog résorbé ≠ rejet TTL persisté ≠ 
 variante lente ; 0 faux positif en nominal (5 témoins) ; refus de conclure EXPLICITE
 (7 raisons cataloguées) quand la donnée ne le permet pas ; fraîcheur des sondes avant
 toute conclusion ; vérification indépendante pointée dans chaque verdict ;
-démonstration de non-confusion backlog/rejet métier/perte en campagne croisée.
+démonstration de non-confusion backlog/rejet métier/perte en campagne croisée ;
+**impact métier par incident** (phase 7) : « X Pix dépassent le SLA de décision »,
+vérifié en base à la ligne près (278 == 278, delta contrôlé 0 == 0).
 
 **Non couvert (honnêteté)** :
 
+- « impact métier » = nombre de dépassements du SLA de décision (compteur en base) —
+  PAS une estimation monétaire ni un pourcentage du trafic ; l'horloge du compteur
+  est celle du socle (remis à zéro à chaque re-création service-health / troncature) ;
 - **aucune perte n'a pu être provoquée** : les persisters du socle rejouent toujours —
   la branche « écart stable = perte » est codée (fermeture non atteinte à l'échéance)
   mais jamais déclenchée en campagne ; documenté tel quel, pas supposé ;
@@ -201,11 +225,17 @@ démonstration de non-confusion backlog/rejet métier/perte en campagne croisée
 
 ---
 
-## 10. Prolongements ouverts (phase 7+, facultatifs)
+## 10. Extensions — implémentées et en réserve
 
-1. **Impact métier** (candidate de garantie #7) : par incident, « X Pix dépassent le
-   SLA de 10 s » issu des compteurs `*_sla_breaches`, vérifiable en base ;
-2. **Détection adaptative** : remplacer des seuils fixes par une estimation liée au
+**Implémentée (phase 7)** — **impact métier** (candidate de garantie #7) : bloc
+`business_impact` dans chaque verdict (total, delta contrôlé, répartition
+validés-tardifs/rejets-TTL, phrase métier, vérification `tp-db.sh`) ; preuve
+rejouable `scripts/impact-metier-proof.sh` + `scripts/lib/impact_report.py`
+(`preuves/phase7-impact-metier-2026-11-05/` : 6/6, moteur == sonde PG == SQL).
+
+**Restées en réserve** :
+
+1. **Détection adaptative** : remplacer des seuils fixes par une estimation liée au
    débit courant — une règle explicite, justifiée et évaluée suffit déjà au minimum ;
-3. **Vue HTTP / panneau Grafana** : le même module peut être exposé par service-health
-   ou rendu en dashboard (extension différée après la phase 6).
+2. **Vue HTTP / panneau Grafana** : le même module peut être exposé par service-health
+   ou rendu en dashboard (extension différée ; aucun rebuild nécessaire).

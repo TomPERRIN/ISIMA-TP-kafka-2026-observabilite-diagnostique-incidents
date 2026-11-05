@@ -7,8 +7,9 @@
 >
 > Sources vivantes : matrice `travail/notes/matrice-symptomes-causes.md`, protocoles
 > d'essais `travail/notes/protocole-campagne-phase4.md` et
-> `travail/notes/protocole-phase5-croisee.md`, preuves `preuves/phase4-*` et
-> `preuves/phase5-*`. Choix techniques : `docs/architecture/diagnostic-engine-design.md`.
+> `travail/notes/protocole-phase5-croisee.md`, preuves `preuves/phase4-*` (campagne
+> 4/4), `preuves/phase5-*` (croisée, non-confusion) et `preuves/phase7-*` (impact
+> métier, 6/6). Choix techniques : `docs/architecture/diagnostic-engine-design.md`.
 
 ---
 
@@ -68,6 +69,7 @@ Table de lecture :
 |---|---|---|
 | `état` | un des 5 verdicts (§3) | si ≠ `healthy` : §4 |
 | `cause` + probabilité/criticité | la cause nommée UNIQUEMENT si l'état n'est pas `indeterminate` | `criticité Critique/Élevée` = examiner en premier |
+| `impact` | combien de Pix ont dépassé le SLA de décision (10 s) : total, `+delta` depuis la lecture précédente, répartition (acceptés en retard / rejets TTL) | chiffre FACTUEL visible dès que les compteurs sont lisibles, même sur `indeterminate` ; à confirmer en base : `tp-db.sh` (colonnes `decision_within_sla`) — **≠ incident système** (§5.4) |
 | `preuves (double lecture)` | les signaux de chaque source (kafka / postgres / platform) | vérifier sur les sources, pas sur un dashboard |
 | `fraîcheur` | âge du payload et de l'instantané réplication (limite 75 s) | âge > limite = sondes périmées : **rien ne conclut** (verdict `indeterminate/probes_stale`), relire après rétablissement |
 | `échantillons (span)` | combien de lectures, espacées de combien, fondent le verdict | span < 10 s → impossible de trancher un compteur qui monte |
@@ -132,6 +134,16 @@ rejoint le flux (fermeture, §7) : **le backlog était transitoire, 0 perte**.
 Que faire : identifier le groupe en retard dans `tp-kafka.sh`, surveiller la file
 (`rates`, `sla_breaches`) et les rejets `processing_timeout` (dépassement du TTL de
 décision 10 s) — le remède dépend du scénario, pas du diagnostic.
+
+Et le verdict **quantifie l'impact métier** (phase 7) : pendant l'incident, une ligne
+`impact` affiche « X Pix ont dépassé le SLA de décision de 10 s — Y rejet(s) métier
+"délai dépassé" (cette donnée est persistée, pas perdue) » avec `+Z depuis la lecture
+précédente`. Preuve `preuves/phase7-impact-metier-…/` : moteur **278** == sonde PG
+**278** == SQL direct **278** (colonnes `decision_within_sla`), delta moteur 0 == variation
+SQL 0 à l'état fermé — **6/6 checks**. Deux pièges écartés par le même relevé : le
+dépassement est compté SEULEMENT sur les vrais TTL bloqués (les 300 rejets métier sans
+SLA de l'essai `errors_simple` restent à 0 dépassement), et « retard » précède « impact »
+(l'incident est détecté à `0/0` avant le premier dépassement).
 
 ### 5.2 Réplication dégradée (situation B) — preuves `preuves/phase5-…/B-replication-croise/`
 
@@ -242,11 +254,15 @@ par `cross-check.sh`) :
 
 # sous-ensemble des cas croisés si besoin :
 ./scripts/cross-check.sh --cases A-draine,rejets-metier
+
+# phase 7 — preuve « impact métier » (moteur == base : X Pix au-delà du SLA 10 s)
+./scripts/impact-metier-proof.sh 300 20    # ~6 min ; preuves dans preuves/phase7-…/
 ```
 
 Résultats de référence (ceux qu'un autre groupe doit retrouver) : phase 4 = justesse
 **4/4**, délai **max 25 s**, faux positifs **0/70** ; phase 5 = **4/4 PASS** avec
-fermeture de chaque état final. Protocoles complets dans `travail/notes/`.
+fermeture de chaque état final ; phase 7 (impact métier) = **6/6 checks** (moteur ==
+sonde PG == SQL direct : 278==278==278 ; delta contrôlé 0 == 0). Protocoles complets dans `travail/notes/`.
 
 ---
 
@@ -276,7 +292,9 @@ vérification suivante ; le garde-fou de fraîcheur (sondes âgées → `probes_
 rien ne conclut ; sonde potentiellement aveuglée par une perturbation réseau →
 `probe_blinded`, on croise la sonde indépendante) ; la vérification
 indépendante pointée dans chaque verdict ; le délai de détection garanti (B inclut le
-cycle lent de rafraîchissement du snapshot réplication, mesuré pendant la campagne).
+cycle lent de rafraîchissement du snapshot réplication, mesuré pendant la campagne) ;
+**l'impact métier par incident** (phase 7) : « X Pix dépassent le SLA de décision »
+issu des compteurs `*_sla_breaches`, vérifiable en base (preuve 6/6, moteur == SQL).
 
 **Non couvert (honnêteté)** :
 

@@ -1,0 +1,94 @@
+{
+ "schema": "simulpix-diagnostic/1",
+ "verdict": "indeterminate",
+ "cause": null,
+ "cause_label": null,
+ "probability": null,
+ "criticality": null,
+ "indeterminate_reason": "needs_second_sample",
+ "business_impact": {
+  "total_sla_breaches": 105.0,
+  "delta_sla_breaches": null,
+  "validated_sla_breaches": 0.0,
+  "rejected_sla_breaches": 105.0,
+  "sla_seconds": 10.0,
+  "label": "105 Pix ont dépassé le SLA de décision de 10 s — 105 rejet(s) métier « délai dépassé » (cette donnée est persistée, pas perdue)",
+  "independent_check": "./scripts/tp-db.sh (colonnes decision_within_sla des deux tables)"
+ },
+ "summary": "Retard possible de lecture mais ne pas conclure sur une seule lecture (lag éclair nominal) : relire à ~15 s via --watch puis trancher.",
+ "notes": [
+  "Échantillon précédent écarté : span 9.3s < seuil 10s (relire encore)"
+ ],
+ "plausible_causes": [
+  {
+   "cause": "reader_backlog",
+   "label": "Retard de lecture applicatif (les applications qui lisent les topics sont en retard)",
+   "family": "consumer_backlog",
+   "probability": "Élevée",
+   "criticality": "Moyenne",
+   "exam_order": 0,
+   "status": "hypothesis",
+   "check": "./scripts/tp-kafka.sh",
+   "note": "lag lecteur = 173 >= seuil 10 : un flash est nominal, relire à 2 échantillons pour conclure"
+  },
+  {
+   "cause": "persister_slow",
+   "label": "PostgreSQL ne suit plus le flux (persister lent / base lente)",
+   "family": "persistence",
+   "probability": "Moyenne",
+   "criticality": "Élevée",
+   "exam_order": 1,
+   "status": "hypothesis",
+   "check": "./scripts/tp-kafka.sh puis ./scripts/tp-db.sh"
+  }
+ ],
+ "evidence": [
+  {
+   "source": "kafka",
+   "metric": "consumer_groups lag_total",
+   "detail": "pix-validator lag_total=0 ; pix-decision-engine lag_total=173 ; pix-outcome-publisher lag_total=0"
+  },
+  {
+   "source": "postgres",
+   "metric": "counts",
+   "detail": "db_validated_count=22.0 db_rejected_count=105.0"
+  },
+  {
+   "source": "postgres",
+   "metric": "gaps",
+   "detail": "persistence_gap_valid=0.0 persistence_gap_rejected=0.0"
+  },
+  {
+   "source": "platform",
+   "metric": "counts",
+   "detail": "generated=300.0 pending_result_count=173.0 validated=22.0"
+  },
+  {
+   "source": "platform",
+   "metric": "rates",
+   "detail": "rates: generated/s=None validated/s=None persisted/s=None"
+  },
+  {
+   "source": "platform",
+   "metric": "state",
+   "detail": "échantillon précédent écarté : span 9.3s < seuil 10s (relire encore)"
+  }
+ ],
+ "freshness": {
+  "ok": true,
+  "threshold_s": 75.0,
+  "payload_age_s": 0.17,
+  "replication_age_s": 15.27,
+  "violations": []
+ },
+ "next_check": [
+  "./scripts/diagnose.sh --watch 15",
+  "./scripts/tp-kafka.sh"
+ ],
+ "based_on": {
+  "samples": 1,
+  "span_s": null,
+  "history_used": false
+ },
+ "sample_timestamp": "2026-11-05T16:47:12.268786+00:00"
+}

@@ -1,0 +1,10 @@
+### db-sla — instant=2026-11-05T16:44:38Z
+sql: validated = count(*) validated_transactions where not decision_within_sla
+validated_breaches|0
+sql: rejected = count(*) rejected_transactions where not decision_within_sla
+rejected_breaches|0
+sql: motifs de rejet (tous les rejets, colonne rejection_reason)
+reason|amount_must_be_positive|75
+reason|beneficiary_tax_pix_mismatch|75
+reason|invalid_initial_status|75
+reason|missing_beneficiary_tax_id|75

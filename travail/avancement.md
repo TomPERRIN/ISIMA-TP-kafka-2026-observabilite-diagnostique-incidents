@@ -19,6 +19,7 @@
 | Incidents provoqués et mesurés | ✅ fait (05/11) | Campagne phase 4 (`scripts/diagnostic-campaign.sh`) : **justesse 4/4, délai max 25 s, 0 FP sur 5 témoins** — `preuves/phase4-campagne-2026-11-05/` |
 | Vérification croisée + non-confusion (phase 5) | ✅ fait (05/11) | `scripts/cross-check.sh` : 4 cas → **4/4 PASS**, chaque conclusion cross-checkée Kafka+PG, fermeture single-snapshot compteurs==PG — candidate #2 démontrée (`preuves/phase5-croisee-2026-11-05/`) |
 | Livrables finaux (guide, note de conception, conclusion) | ✅ fait (05/11) | `docs/operations/guide-diagnostic.md` + `docs/architecture/diagnostic-engine-design.md` (portée/limites = conclusion) ; protocoles + relevés déjà en place (§1.7/§1.8) |
+| Extension : impact métier (candidate #7, phase 7) | ✅ fait (05/11) | Bloc `business_impact` dans chaque verdict, vérifiable en base ; preuve 6/6 (moteur == sonde PG == SQL : 278==278==278) — `preuves/phase7-impact-metier-2026-11-05/` + `scripts/impact-metier-proof.sh` |
 
 ---
 
@@ -269,6 +270,45 @@ démonstration de non-confusion (`SYNTHESE.md` phase 5), guide reproductible.
 
 ---
 
+### 1.10 Impact métier — phase 7, candidate #7 implémentée (05/11/2026)
+
+**Choix** : parmi les extensions (impact métier, détection adaptative, vue
+HTTP/Grafana), la **candidate de garantie #7** est retenue et implémentée — champ
+« impact métier » par incident, vérifiable en base.
+
+**Code** :
+- moteur : bloc **`business_impact`** attaché dans `build_verdict` après les règles —
+  total des dépassements (compteurs `validated/rejected_sla_breaches`), `delta` entre
+  2 lectures espacées ≥ 10 s (même garde-fou anti lag éclair), répartition
+  « acceptés en retard / rejets TTL », phrase métier imprimée dans le verdict et
+  `independent_check` = `tp-db.sh` ; `null` sur sondes périmées / données manquantes ;
+- CLI : ligne `impact` dans la sortie humaine ; cache/enregistreur inchangés ;
+- rapports/protocole : `scripts/impact-metier-proof.sh` + `scripts/lib/impact_report.py`.
+
+**Source en base** (le socle ne change pas) : `probes.py` compte les colonnes
+`decision_within_sla` des deux tables et l'expose deux fois (`metrics.counts.*` et
+`details.postgres.*`) — la preuve confronte ces trois couches.
+
+**Preuve live** (`preuves/phase7-impact-metier-2026-11-05/SYNTHESE.md`) : scénario
+`consumer_lag 300 @ 20/s`, 3 couches comparées à 5 instants (t0 / pendant ×2 / état
+fermé ×2) : moteur **278** == sonde PG **278** == SQL direct **278** (rejets 100 %
+`processing_timeout`), delta contrôlé moteur **0** == variation SQL **0** à l'état
+fermé, total montant pendant l'incident (13 → 238, ≈ débit réel du decision-engine)
+puis immobilisé après la fermeture : **6/6 checks PASS**. Non-confusion maintenue :
+les 300 rejets métier « dans le SLA » restés de l'essai errors_simple ne comptent pas
+comme dépassements ; l'incident est détecté à impact **0/0** (le retard précède le
+TTL) ; `unreachable` pendant le redémarrage de la plateforme ne conclut rien.
+
+**Tests** : 26 → **32 tests unitaires OK** (6 nouveaux : nominal 0, comptage pendant
+incident, delta inter-échantillons, présent sur `indeterminate`, absent si données
+manquantes, `null` sur sondes périmées).
+
+**Docs** : guide §2 (ligne `impact` du verdict), §5.1 (impact pendant un retard),
+§8 (rejouage phase 7), §10 (couvert) ; note de conception §2/§3/§8/§9 (couvert +
+limite de lecture), §10 (candidate #7 passe de « prolongement » à « implémentée »).
+
+---
+
 ## 2. Journal des décisions
 
 | Date | Décision |
@@ -293,6 +333,7 @@ démonstration de non-confusion (`SYNTHESE.md` phase 5), guide reproductible.
 | 05/11/2026 | **Phase 6 (livrables) écrite** : guide praticien + note de conception (seuils justifiés par les mesures) ; la « conclusion » est double : guide §10 (praticien) + note §9 (conception), incluant le résultat négatif « aucune perte provoquable, les persisters rejouent » |
 | 05/11/2026 | Vue HTTP/panneau Grafana du moteur **définitivement différée** indiquée dans le livrable (décision phase 4 maintenue) ; la CLI est le produit |
 | 05/11/2026 | **Relecture croisée guide + note de conception** : imprécision corrigée sur le service down (conclusif pour un service à famille, `transversal`/`probe_blinded` sinon — vérifié dans le code), timeline A calée sur les horodatages, table des seuils clarifiée |
+| 05/11/2026 | **Phase 7 (impact métier, candidate #7) implémentée** : bloc `business_impact` factuel dans le verdict (moteur croise les compteurs SLA du socle, branche-cause intacte, garde-fous identiques) ; 32 tests OK ; preuve live moteur==sonde==SQL 278==278 (6/6) dans `preuves/phase7-impact-metier-…` ; adaptative et vue HTTP restent en réserve |
 
 ---
 
@@ -309,25 +350,25 @@ démonstration de non-confusion (`SYNTHESE.md` phase 5), guide reproductible.
 
 ## 4. En cours
 
-Rien en cours — phases 2 à 6 closes. Les critères de la garantie #1 sont mesurés et
-tenus (justesse 4/4, délai max 25 s, 0 faux positif), la candidate #2 est démontrée
-(4/4 PASS) et les livrables finaux (guide praticien, note de conception, conclusion)
-sont édités avec les relevés en citations. Il reste (facultatif) la dimension
-théorique et le rendu GitHub final.
+Rien en cours — phases 2 à 7 closes. La garantie #1 est mesurée et tenue (justesse
+4/4, délai max 25 s, 0 faux positif), la candidate #2 est démontrée (4/4 PASS), les
+livrables finaux sont édités et la candidate #7 (impact métier) est implémentée et
+prouvée (6/6). Il reste la dimension théorique (facultative, encouragée) et le rendu
+GitHub final.
 
 ---
 
 ## 5. Prochaines étapes
 
-1. **Relecture croisée des livrables** (guide + note de conception) : vérifier le
-   pas à pas d'un praticien qui ne connaît pas le dépôt (tout doit converger vers
-   `preuves/` et les protocoles).
-2. **Phase 8 — dimension théorique (encouragée)** : formaliser les hypothèses de
+1. **Pusher la phase 7** : moteur + CLI + tests + scripts de preuve + preuves + docs
+   + pilotage (liste fournie à l'utilisateur).
+2. **Phase 9 — rendu GitHub final** (à faire en continu) : README racine (sujet,
+   garantie, démarche de rejeu incluant `impact-metier-proof.sh`), vérifier pas de
+   secrets ni de `runtime/` déposé, collaborateur invité, dépôt en PUBLIC la veille
+   de la soutenance.
+3. **Phase 8 — dimension théorique (encouragée)** : formaliser les hypothèses de
    cause / observations discriminantes / cas indéterminé ; consulter
    `TP/SAé/analyse-recherche-limos.md` et préparer l'échange avec l'enseignant/LIMOS.
-3. **Phase 9 — rendu GitHub final** : README racine (sujet, garantie, démarche de
-   rejeu), vérifier pas de secrets ni de `runtime/` déposé, collaborateur invité,
-   puis dépôt en PUBLIC la veille de la soutenance.
-4. Phase 7 (extensions facultatives) si le temps le permet : impact métier (candidate
-   #7), détection adaptative, vue HTTP/Grafana.
+4. Extensions restées en réserve (si surplus de temps) : détection adaptative, vue
+   HTTP/panneau Grafana du moteur.
 

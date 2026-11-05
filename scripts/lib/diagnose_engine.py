@@ -369,6 +369,58 @@ def _breaches_total(s: Dict[str, Any]) -> Optional[float]:
     return (a or 0.0) + (b or 0.0)
 
 
+def _business_impact(s: Dict[str, Any], s_prev: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Bloc « impact métier » (candidate de garantie #7) : combien de Pix ont dépassé
+    le SLA de décision — lu dans les compteurs ``*_sla_breaches``, comptés EN BASE
+    par le socle (colonnes ``decision_within_sla``) et donc vérifiables par tp-db.sh.
+
+    Données FACTUELLES attachées à tout verdict à sondes fraîches (ce n'est pas une
+    conclusion de cause : la branche cause reste le travail des règles de la matrice).
+    None si l'information n'est pas lisible (le verdict reste sans bloc).
+    """
+    validated = s.get("validated_sla_breaches")
+    rejected = s.get("rejected_sla_breaches")
+    if validated is None and rejected is None:
+        return None
+    total = (validated or 0.0) + (rejected or 0.0)
+    prev_total = None
+    if s_prev is not None:
+        pv, pr = s_prev.get("validated_sla_breaches"), s_prev.get("rejected_sla_breaches")
+        if pv is not None or pr is not None:
+            prev_total = (pv or 0.0) + (pr or 0.0)
+    delta = (total - prev_total) if (prev_total is not None and total >= prev_total) else None
+    sla = s.get("sla_seconds")
+    if total > 0:
+        label = f"{int(total):g} Pix ont dépassé le SLA de décision"
+        if sla is not None:
+            label += f" de {int(sla):g} s"
+        breakdown = []
+        if rejected:
+            breakdown.append(f"{int(rejected):g} rejet(s) métier « délai dépassé »")
+        if validated:
+            breakdown.append(f"{int(validated):g} décision(s) acceptée(s) au-delà du SLA")
+        if breakdown:
+            label += " — " + ", ".join(breakdown) + " (cette donnée est persistée, pas perdue)"
+        if delta:
+            label += f" ; +{int(delta):g} depuis la lecture précédente"
+    else:
+        label = "Aucun Pix n'a dépassé le SLA de décision"
+        if sla is not None:
+            label += f" de {int(sla):g} s"
+        label += " (aucun dépassement compté en base)"
+        if delta:
+            label += f" ; +{int(delta):g} depuis la lecture précédente"
+    return {
+        "total_sla_breaches": total,
+        "delta_sla_breaches": delta,
+        "validated_sla_breaches": validated,
+        "rejected_sla_breaches": rejected,
+        "sla_seconds": sla,
+        "label": label,
+        "independent_check": "./scripts/tp-db.sh (colonnes decision_within_sla des deux tables)",
+    }
+
+
 def _db_total(s: Dict[str, Any]) -> Optional[float]:
     a, b = s.get("db_validated"), s.get("db_rejected")
     if a is None and b is None:
@@ -452,6 +504,7 @@ def _base_verdict() -> Dict[str, Any]:
         "probability": None,
         "criticality": None,
         "indeterminate_reason": None,
+        "business_impact": None,
         "summary": "",
         "notes": [],
         "plausible_causes": [],
@@ -1205,6 +1258,9 @@ def build_verdict(payload: Dict[str, Any], now: Optional[float] = None,
         extra_evidence.append(_ev("platform", "state", "échantillon précédent écarté : " + rejection))
 
     verdict = route(payload, s, s_prev, span, now, freshness, config, notes)
+    impact = _business_impact(s, s_prev)
+    if impact is not None:
+        verdict["business_impact"] = impact
     for note in notes:
         if note and note not in verdict["notes"]:
             verdict["notes"].append(note)

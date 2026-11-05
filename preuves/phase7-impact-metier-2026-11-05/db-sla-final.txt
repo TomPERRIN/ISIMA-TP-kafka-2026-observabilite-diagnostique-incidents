@@ -1,0 +1,7 @@
+### db-sla — instant=2026-11-05T16:48:35Z
+sql: validated = count(*) validated_transactions where not decision_within_sla
+validated_breaches|0
+sql: rejected = count(*) rejected_transactions where not decision_within_sla
+rejected_breaches|278
+sql: motifs de rejet (tous les rejets, colonne rejection_reason)
+reason|processing_timeout|278
