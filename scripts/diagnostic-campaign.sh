@@ -106,23 +106,7 @@ ensure_platform() {
 run_recorder() {
   # run_recorder <sous-dossier du cas> <fenêtre en s>
   local dir="$1" window="$2"
-  local deadline=$(( $(date +%s) + window ))
-  while [ "$(date +%s)" -lt "$deadline" ]; do
-    local ts
-    ts="$(date +%s)"
-    local sample="$REPO_DIR/runtime/.campaign-sample.json"
-    if curl -fsS "${SIMULPIX_HEALTH_URL:-http://localhost:8082/health/details}" -o "$sample" 2>/dev/null; then
-      if out="$(python3 "$SCRIPT_DIR/lib/diagnose_cli.py" --sample "$sample" \
-                       --cache "$REPO_DIR/runtime/diagnostic-cache.json" --json 2>/dev/null)"; then
-        T_EPOCH="$ts" python3 "$SCRIPT_DIR/lib/compact_verdict.py" <<<"$out" >>"$dir/verdicts.jsonl"
-      else
-        printf '{"t_epoch":%s,"verdict_error":"cli_failed"}\n' "$ts" >>"$dir/verdicts.jsonl"
-      fi
-    else
-      printf '{"t_epoch":%s,"error":"unreachable"}\n' "$ts" >>"$dir/verdicts.jsonl"
-    fi
-    sleep "$REC_INTERVAL"
-  done
+  bash "$SCRIPT_DIR/lib/record-verdicts.sh" "$dir" "$window" "$REC_INTERVAL"
 }
 
 pg_outage_background() {

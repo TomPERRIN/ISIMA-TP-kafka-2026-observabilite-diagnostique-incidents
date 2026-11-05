@@ -1,0 +1,4 @@
+{"t_epoch":1793893173,"event":"case_start","detail":"./scripts/run-scenario.sh errors_simple 300 10"}
+{"t_epoch":1793893194,"event":"baseline_captured","detail":"t0"}
+{"t_epoch":1793893255,"event":"scenario_ready","detail":""}
+{"t_epoch":1793893371,"event":"case_end","detail":""}

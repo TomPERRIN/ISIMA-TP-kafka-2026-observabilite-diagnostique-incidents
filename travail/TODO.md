@@ -11,7 +11,7 @@
 1. [Phase 2 — Terminer l'état des lieux ✅](#1-phase-2--terminer-létat-des-lieux-✅)
 2. [Phase 3 — Conception de l'outil de diagnostic](#2-phase-3--conception-de-loutil-de-diagnostic) (matrice ✅, automatisation ✅)
 3. [Phase 4 — Automatisation des essais](#3-phase-4--automatisation-des-essais)
-4. [Phase 5 — Vérification croisée](#4-phase-5--vérification-croisée)
+4. [Phase 5 — Vérification croisée ✅](#4-phase-5--vérification-croisée-✅)
 5. [Phase 6 — Livrables et preuves](#5-phase-6--livrables-et-preuves)
 6. [Phase 7 — Extension (si temps)](#6-phase-7--extension-si-temps)
 7. [Phase 8 — Dimension théorique](#7-phase-8--dimension-théorique)
@@ -139,16 +139,45 @@ est **différée après la campagne d'essais phase 4** — le moteur ne modifie 
 
 ---
 
-## 4. Phase 5 — Vérification croisée
+## 4. Phase 5 — Vérification croisée ✅
 
 **Objectif : prouver que le diagnostic repose sur la donnée, pas sur un graphique.**
+✅ FAIT (05/11/2026) — `scripts/cross-check.sh` (4 cas : `A-draine`,
+`B-replication-croise`, `C-rattrapage`, `rejets-metier`) + analyse
+`scripts/lib/crosscheck_report.py` (convergence `scripts/lib/convergence_check.py`),
+protocole rejouable dans [`notes/protocole-phase5-croisee.md`](notes/protocole-phase5-croisee.md),
+preuves dans `preuves/phase5-croisee-2026-11-05/`.
 
-- ⬜ Vérifier **CHAQUE conclusion contre Kafka ET PostgreSQL** (`tp-kafka.sh`, `tp-db.sh`, consumer groups, contenu des tables), pas seulement contre un dashboard Grafana.
-- ⬜ Démontrer que le diagnostic **NE CONFOND PAS** : backlog consommateur / rejet métier / perte de données.
-  - backlog temporaire = lag > 0 **drainé** + convergence finale DB == métier + gap == 0 ;
-  - perte = gap > 0 **stable** après drainage ;
-  - rejet métier attendu = compteurs `rejected` cohérents avec les tables PG, **pas un incident**.
-  - Essai de preuve : scénario `errors_simple` (rejets métier) comparé à un incident de persistance.
+- ✅ Vérifier **CHAQUE conclusion contre Kafka ET PostgreSQL** (`tp-kafka.sh`, `tp-db.sh`,
+  consumer groups, contenu des tables), pas seulement contre un dashboard Grafana :
+  chaque cas capture `tp-kafka-<label>.txt` + `tp-db-<label>.txt` + payload
+  `health-<label>.json` + compteurs `counts-<label>.json` à `t0` (baseline), pendant
+  l'incident (`A-draine`, `C-rattrapage`) et à la fermeture (`final`).
+- ✅ Démontrer que le diagnostic **NE CONFOND PAS** : backlog consommateur / rejet
+  métier / perte de données — **4/4 PASS** (candidate de garantie **#2** démontrée) :
+  - **backlog temporaire** (A-draine, `consumer_lag` décision 400 ms / persisters 0) :
+    `indeterminate/needs_second_sample` au 1er échantillon (fusible anti-lag-éclair),
+    puis **10×`consumer_backlog`** (lag jusqu'à 517) ; à la fermeture `db=20+580 /
+    outcome=600 / écarts=0 / lag=0` → TOUTE la donnée finit persistée, **dont les 580
+    rejets `processing_timeout`** (TTL de décision 10 s dépassé sous grand backlog) qui
+    sont des rejets métier **persistés en base, PAS une perte** ;
+  - **perte = écart stable** : suite des fermetures étudiée après drainage — jamais
+    déclenchée en l'état, car les persisters du socle **rejouent toujours** (rattrapage
+    complet de C : `db=800+0 / outcome=800 / écarts=0` après `stop postgres` 40 s →
+    **0 perte mesurée**) ; la branche « perte mesurée » est codée dans
+    `convergence_check.py`/rapport (fermeture non atteinte à l'échéance) et le résultat
+    négatif est documenté honnêtement dans le protocole ;
+  - **rejet métier attendu** : scénario `errors_simple` → **300 rejetés == 300 lignes
+    en PG** (cohérence compteurs ↔ tables), moteur **AUCUN incident sonné** (8×
+    `healthy`) → rejet ≠ incident ;
+  - **B-replication-croise** (kafka-3 arrêté 20 s) : verdict `kafka_replication`
+    révéré par la capture **Kafka en direct** (`tp-kafka-final.txt` : brokers, URP,
+    contrôleur), pas par un dashboard.
+- ✅ **Convergence en fermeture single-snapshot** : `run-scenario.sh` relance
+  service-health à chaque cas (compteurs cumulés recalculés) → deltas inter-cas
+  interdits ; fermeture = `generated == raw_end == validated+rejected == outcome ==
+  db_validated+db_rejected`, écarts 0, lag ≤ 5 (leçon §1.8).
+- ✅ Essai de preuve `errors_simple` en place (cas `rejets-metier` ci-dessus).
 
 ---
 

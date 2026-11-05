@@ -17,8 +17,8 @@
 | Matrice symptôme / cause / vérification | ✅ fait (v1) | `notes/matrice-symptomes-causes.md` — 5 lignes + classement probabilité/criticité, **manuelle** (commit `05c67db`) |
 | Automatisation de la matrice (le produit) | ✅ fait (05/11) | `scripts/diagnose.sh` + moteur `scripts/lib/diagnose_engine.py` (4 états + 26 tests unitaires) — couverture A/B/C, double lecture, fraîcheur ; vue HTTP différée |
 | Incidents provoqués et mesurés | ✅ fait (05/11) | Campagne phase 4 (`scripts/diagnostic-campaign.sh`) : **justesse 4/4, délai max 25 s, 0 FP sur 5 témoins** — `preuves/phase4-campagne-2026-11-05/` |
-| Vérification croisée + non-confusion (phase 5) | ⬜ à faire | Chaque conclusion vs Kafka ET PostgreSQL ; démo backlog ≠ rejet ≠ perte |
-| Livrables finaux | ⬜ à faire | Note de conception, protocole, guide |
+| Vérification croisée + non-confusion (phase 5) | ✅ fait (05/11) | `scripts/cross-check.sh` : 4 cas → **4/4 PASS**, chaque conclusion cross-checkée Kafka+PG, fermeture single-snapshot compteurs==PG — candidate #2 démontrée (`preuves/phase5-croisee-2026-11-05/`) |
+| Livrables finaux | ⬜ à faire | Guide praticien, note de conception (protocoles campagne §1.7 et croisée §1.8 déjà écrits) |
 
 ---
 
@@ -180,6 +180,52 @@ rejouable documenté dans [`notes/protocole-campagne-phase4.md`](notes/protocole
 
 ---
 
+### 1.8 Vérification croisée et non-confusion — phase 5 (05/11/2026)
+
+L'outil : `scripts/cross-check.sh` — 4 cas (`A-draine`, `B-replication-croise`,
+`C-rattrapage`, `rejets-metier`), contrôle de fermeture `scripts/lib/convergence_check.py`,
+rapport `scripts/lib/crosscheck_report.py`, enregistreur de verdicts **mutualisé**
+`scripts/lib/record-verdicts.sh` (la campagne phase 4 est refactorée dessus, comportement
+inchangé). Protocole rejouable : [`notes/protocole-phase5-croisee.md`](notes/protocole-phase5-croisee.md).
+Chaque cas capture, à `t0` (baseline) / pendant l'incident / à la fermeture :
+`tp-kafka.sh` et `tp-db.sh` EN DIRECT (croisement par définition indépendant des
+dashboards), le payload `/health/details` (`health-*.json`) et les compteurs clés
+(`counts-*.json`) — le moteur est relevé toutes les 11 s dans `verdicts.jsonl`
+(events horodatés dans `events.jsonl`).
+
+**Résultats** (`preuves/phase5-croisee-2026-11-05/SYNTHESE.md`) : **4/4 PASS** — la
+candidate de garantie **#2** est démontrée :
+
+| Cas | Levier | Verdicts moteur | Fermeture (état final) | Conclusion |
+|---|---|---|---|---|
+| A-draine | `consumer_lag` décision 400 ms / persisters 0, 600 msgs | 1×`indeterminate` (anti-lag-éclair) → **10×`consumer_backlog`** (lag pic 517) → 1×`indeterminate/ambiguous_sla` (transition) → 3×healthy | db=20+580 / outcome=600 / écarts=0 / lag=0 ✔ | backlog transitoire, la totalité est en base — dont **580 `processing_timeout` = rejets métier PERSISTÉS** (un rejet persisté ≠ une perte) |
+| B-replication-croise | kafka-3 arrêté 20 s | `kafka_replication` (cause `replication_catchup`) puis healthy | db=600+0 / outcome=600 ✔ | verdict **révéré par Kafka en direct** (`tp-kafka-final.txt` : brokers/URP/contrôleur), pas par un dashboard |
+| C-rattrapage | `stop postgres` 40 s puis relance (flux 800) | **3×`persistence`** (`service_down:postgres`, cause `postgres_unavailable`) | db=800+0 / outcome=800 / écarts=0 ✔ | PostgreSQL rejoint au retour : **rattrapage complet, 0 perte mesurée** |
+| rejets-metier | `errors_simple` (300 msgs → 300 rejets métier) | **AUCUN incident sonné** (8×healthy) | db=0+300 == 300 `rejected` ✔ | rejet métier ≠ incident (cohérence compteurs ↔ tables PG) |
+
+**Leçon de méthode — fermeture single-snapshot** : `run-scenario.sh` relance
+service-health à chaque cas → tous les compteurs cumulés sont recalculés de zéro ; un
+delta entre deux instants (t0 → final) croise donc deux runs DIFFÉRENTES (le rapport v1
+a produit un « db=200/outcome=200 » aberrant sur C : 800 final − 600 d'une autre run).
+La convergence est redéfinie sur **UN seul snapshot** : `generated == raw_end ==
+validated+rejected == outcome == db_validated+db_rejected`, écarts de persistance 0,
+lag ≤ 5 — implantée dans `convergence_check.py` (attente active) et recalculée par le
+rapport. Les états non fermés sont des sorties attendues et documentées
+(`pendant-backlog` de A : lag 235, décision en cours de rattrapage) ; la branche
+« perte mesurée » (écarts qui refusent de se résorber à l'échéance) est codée dans le
+rapport mais n'a jamais déclenché : **les persisters du socle rejouent toujours** — ce
+résultat (0 perte provoquable par une simple panne de PG) est documenté tel quel.
+
+**Deux bugs d'outillage trouvés et corrigés avant de conclure** (v1 relancée intégralement) :
+
+- `record-verdicts.sh` : `REPO_DIR` calculé un cran trop haut (parent de `lib` au lieu
+  de la racine) → dossier d'échantillon inexistant → **100 % de `unreachable`** dans
+  les verdicts — corrigé (scripts/lib → racine à 2 niveaux), vérifié en direct ;
+- le rapport v1 était calé sur des deltas inter-cas (voir leçon de méthode) — v2
+  sur la fermeture single-snapshot.
+
+---
+
 ## 2. Journal des décisions
 
 | Date | Décision |
@@ -198,6 +244,9 @@ rejouable documenté dans [`notes/protocole-campagne-phase4.md`](notes/protocole
 | 05/11/2026 | **Moteur écrit + 26 tests OK** ; essai CLI bout en bout validé hors plateforme (fixtures du payload nominal de référence) ; campagne live (phase 4) en attente de Docker/WSL réactivé |
 | 05/11/2026 | **Campagne phase 4 tournée** (`scripts/diagnostic-campaign.sh` + rapport) : justesse **4/4**, délai **max 25 s**, faux positifs **0/70** sur 5 témoins ; discriminateur « écart qui S'ACCROÎT » validé en direct (3 → 319) ; seuils tenus sans recalibration |
 | 05/11/2026 | Cadence de relevé fixée à **11 s** (≥ span moteur 10 s) : la v1 à 5 s bloquait les règles à delta sur `needs_second_sample` — relevés v1 archivés (`archives-rec5s/`), protocole documentant la quantification du délai (`notes/protocole-campagne-phase4.md`) |
+| 05/11/2026 | **Phase 5 (vérification croisée) tournée** : 4/4 PASS — A : backlog drainé, 580 rejets TTL **persistés** (≠ perte) ; C : rattrapage complet (0 perte mesurée) ; rejets-metier : rejet ≠ incident (0 verdict d'incident) ; B : verdict cross-checké sur Kafka en direct. Candidate **#2** démontrée |
+| 05/11/2026 | Convergence redéfinie en **fermeture single-snapshot** (`generated==raw_end==validated+rejected==outcome==db_total`, écarts 0, lag ≤ 5) : les deltas inter-cas sont interdits — `run-scenario.sh` relance service-health (compteurs re-calculés à chaque cas) |
+| 05/11/2026 | Enregistreur de verdicts **mutualisé** (`scripts/lib/record-verdicts.sh`, campagne phase 4 refactorée dessus) ; bug `REPO_DIR` à un cran corrigé (v1 : 100 % `unreachable`) |
 
 ---
 
@@ -214,22 +263,25 @@ rejouable documenté dans [`notes/protocole-campagne-phase4.md`](notes/protocole
 
 ## 4. En cours
 
-Rien en cours — la phase 4 (campagne d'incidents provoqués) est close : les critères de la
-garantie #1 sont mesurés et tenus (justesse 4/4, délai max 25 s, 0 faux positif). L'étape
-suivante est la vérification croisée (Phase 5).
+Rien en cours — phase 4 (campagne) et phase 5 (vérification croisée) closes : les
+critères de la garantie #1 sont mesurés et tenus (justesse 4/4, délai max 25 s, 0 faux
+positif) et la candidate #2 (non-confusion backlog ≠ rejet métier ≠ perte) est démontrée
+(4/4 PASS, `preuves/phase5-croisee-2026-11-05/`). L'étape suivante est la phase 6
+(livrables : guide praticien, note de conception).
 
 ---
 
 ## 5. Prochaines étapes
 
-1. **Vérification croisée** (Phase 5) : chaque conclusion du moteur contre Kafka ET
-   PostgreSQL (`tp-kafka.sh`, `tp-db.sh`, contenu des tables) ; démonstration de
-   **non-confusion** backlog consommateur ≠ rejet métier ≠ perte de données
-   (candidate de garantie #2) — essai de preuve prévu : scénario `errors_simple`
-   (rejets métier attendus) comparé à un incident de persistance.
-2. **Livrables** (Phase 6) : guide praticien (`docs/operations/guide-diagnostic.md`,
-   recette pas à pas `diagnose.sh` + `tp-kafka.sh` + `tp-db.sh`), note de conception
-   (`docs/architecture/diagnostic-engine-design.md`), relevés déjà en place dans `preuves/`.
-3. Vue HTTP/panneau Grafana du moteur — uniquement **après** la phase 5 (décision 05/11 :
-   aucun rebuild d'image pendant les boucles d'essai).
+1. **Livrables** (Phase 6) : guide praticien (`docs/operations/guide-diagnostic.md`,
+   recette pas à pas `diagnose.sh` + `cross-check.sh` + `tp-kafka.sh`/`tp-db.sh` à
+   l'usage d'un autre groupe pendant un incident), note de conception
+   (`docs/architecture/diagnostic-engine-design.md`, choix techniques + justification
+   des seuils) ; les « relevés pour au moins 3 situations distinctes » sont déjà en
+   place (`preuves/phase4-campagne-…` + `preuves/phase5-croisee-…`).
+2. **Conclusion** : ce que la garantie couvre et ne couvre pas (dont : « aucune perte
+   n'a pu être provoquée, les persisters du socle rejouent toujours »), puis mise à
+   jour README et rendu GitHub final.
+3. Vue HTTP/panneau Grafana du moteur — reportée après la phase 6 (aucun rebuild
+   nécessaire ; différée à la phase 4 puis la phase 5).
 

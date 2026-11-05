@@ -1,0 +1,82 @@
+### final — 2026-11-05T15:29:48Z
+============================================================
+TP Kafka - lecture guidée de la plateforme simul-pix
+============================================================
+
+À retenir :
+- un topic est un journal logique de messages ;
+- une partition est une tranche ordonnée de ce journal ;
+- un consumer group garde sa propre position de lecture ;
+- un lag positif signifie que le groupe a encore des messages à traiter.
+
+1) Topics Kafka applicatifs
+---------------------------
+Ordre logique du parcours d'une transaction Pix :
+  raw -> checked -> decision -> outcome
+  validated / rejected sont les sorties métier ; retry sert au rejeu.
+
+  simulpix.transactions.raw             partitions=6  replication=3   Pix émis par generator
+  simulpix.transactions.checked         partitions=6  replication=3   Pix contrôlés par pix-validator
+  simulpix.transactions.decision        partitions=6  replication=3   Décisions publiées par pix-decision-engine
+  simulpix.transactions.validated       partitions=6  replication=3   Pix acceptés
+  simulpix.transactions.rejected        partitions=3  replication=3   Pix rejetés / topic de rejet métier
+  simulpix.transactions.retry           partitions=3  replication=3   Messages republiés pour rejeu
+  simulpix.transactions.outcome         partitions=6  replication=3   Réponses finales client
+
+2) Tous les topics visibles dans le cluster
+------------------------------------------
+  - __consumer_offsets
+  - simulpix.transactions.checked
+  - simulpix.transactions.decision
+  - simulpix.transactions.outcome
+  - simulpix.transactions.raw
+  - simulpix.transactions.rejected
+  - simulpix.transactions.retry
+  - simulpix.transactions.validated
+
+3) Consumer groups applicatifs
+------------------------------
+Un groupe correspond à une application qui lit un ou plusieurs topics.
+Deux groupes différents peuvent lire les mêmes messages indépendamment.
+Dans un même groupe, Kafka répartit les partitions entre les membres.
+
+Groupe: simulpix-validator-1793892231
+Rôle  : lit raw et retry, publie checked
+Lecture: CURRENT-OFFSET = position déjà lue, LOG-END-OFFSET = fin du topic, LAG = messages en retard.
+  topic                              partitions fin-topic      lag        lecture
+  simulpix.transactions.retry        3          0              0          offset non initialisé sur 3 partition(s)
+  simulpix.transactions.raw          6          600            0          offset non initialisé sur 2 partition(s)
+
+Groupe: simulpix-decision-engine-1793892231
+Rôle  : lit checked, publie validated/rejected/decision
+Lecture: CURRENT-OFFSET = position déjà lue, LOG-END-OFFSET = fin du topic, LAG = messages en retard.
+  topic                              partitions fin-topic      lag        lecture
+  simulpix.transactions.checked      6          600            0          offset non initialisé sur 2 partition(s)
+
+Groupe: simulpix-outcome-publisher-1793892231
+Rôle  : lit decision, publie outcome
+Lecture: CURRENT-OFFSET = position déjà lue, LOG-END-OFFSET = fin du topic, LAG = messages en retard.
+  topic                              partitions fin-topic      lag        lecture
+  simulpix.transactions.decision     6          600            0          offset non initialisé sur 2 partition(s)
+
+Groupe: simulpix-persister-valid-1793892231
+Rôle  : lit validated et persiste les Pix acceptés
+Lecture: CURRENT-OFFSET = position déjà lue, LOG-END-OFFSET = fin du topic, LAG = messages en retard.
+  topic                              partitions fin-topic      lag        lecture
+  simulpix.transactions.validated    6          20             0          offset non initialisé sur 2 partition(s)
+
+Groupe: simulpix-persister-rejected-1793892231
+Rôle  : lit rejected et persiste les Pix rejetés
+Lecture: CURRENT-OFFSET = position déjà lue, LOG-END-OFFSET = fin du topic, LAG = messages en retard.
+  topic                              partitions fin-topic      lag        lecture
+  simulpix.transactions.rejected     3          580            0          à jour
+
+4) Comment lire cette sortie
+---------------------------
+- partitions=6 signifie que jusqu'à 6 consommateurs du même groupe peuvent travailler utilement en parallèle sur ce topic.
+- replication=3 signifie que chaque partition est répliquée sur les 3 brokers Kafka.
+- LAG=0 signifie que le groupe a rattrapé la fin du topic.
+- LAG>0 signifie que des messages sont encore en attente pour ce groupe.
+- offset non initialisé signifie souvent que cette partition est vide ou pas encore committée.
+- Si un groupe affiche peu ou pas de lignes juste après un reset, lancez un scénario puis relancez ce script.
+- Pour afficher le détail brut Kafka : SIMULPIX_TP_KAFKA_VERBOSE=1 ./scripts/tp-kafka.sh

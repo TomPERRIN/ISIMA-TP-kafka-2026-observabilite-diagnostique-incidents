@@ -1,0 +1,15 @@
+### final — 2026-11-05T15:39:32Z
+ validated_count 
+-----------------
+             800
+(1 row)
+
+ rejected_count 
+----------------
+              0
+(1 row)
+
+ rejection_reason | occurrences 
+------------------+-------------
+(0 rows)
+

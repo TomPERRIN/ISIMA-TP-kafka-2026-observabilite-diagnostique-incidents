@@ -1,0 +1,282 @@
+{
+ "cases": [
+  {
+   "case": "A-draine",
+   "expected_family": "consumer_backlog",
+   "samples": 30,
+   "unreachable": 15,
+   "verdict_counts": {
+    "consumer_backlog": 10,
+    "healthy": 3,
+    "indeterminate": 2
+   },
+   "causes_seen": [
+    "reader_backlog",
+    "upstream_stopped_normal"
+   ],
+   "convergence": {
+    "converged": true,
+    "checks": {
+     "generated_vs_raw": true,
+     "decisions_vs_generated": true,
+     "outcome_vs_decisions": true,
+     "db_vs_outcome": true,
+     "persistence_gaps_zero": true,
+     "consumers_caught_up": true
+    },
+    "values": {
+     "generated": 600,
+     "validated": 20,
+     "rejected": 580,
+     "outcome_count": 600,
+     "raw_topic_end_offsets": 600,
+     "validated_topic_end_offsets": 20,
+     "rejected_topic_end_offsets": 580,
+     "outcome_topic_end_offsets": 600,
+     "db_validated_count": 20,
+     "db_rejected_count": 580,
+     "persistence_gap_valid": 0,
+     "persistence_gap_rejected": 0,
+     "lag_max": 0,
+     "payload_timestamp": "2026-11-05T15:30:13.224474+00:00"
+    }
+   },
+   "final_counts": {
+    "generated": 600,
+    "validated": 20,
+    "rejected": 580,
+    "outcome_count": 600,
+    "raw_topic_end_offsets": 600,
+    "validated_topic_end_offsets": 20,
+    "rejected_topic_end_offsets": 580,
+    "outcome_topic_end_offsets": 600,
+    "db_validated_count": 20,
+    "db_rejected_count": 580,
+    "persistence_gap_valid": 0,
+    "persistence_gap_rejected": 0,
+    "lag_max": 0,
+    "payload_timestamp": "2026-11-05T15:30:13.224474+00:00"
+   },
+   "incident_families_seen": [
+    "consumer_backlog",
+    "consumer_backlog",
+    "consumer_backlog",
+    "consumer_backlog",
+    "consumer_backlog",
+    "consumer_backlog",
+    "consumer_backlog",
+    "consumer_backlog",
+    "consumer_backlog",
+    "consumer_backlog"
+   ],
+   "recheck": {
+    "backlog_détecté": true,
+    "rattrapage_complet": true,
+    "db_rejected": 580,
+    "lag_max_final": 0
+   },
+   "non_confusion": "PASS",
+   "non_confusion_detail": "le moteur a nommé `consumer_backlog` pendant l'incident, puis la convergence finale (generated==raw_end, outcome==db_total, écarts 0) prouve que le backlog était transitoire : TOUTE la donnée est finalement persistée, AUCUNE perdue (rejetés métier en base : 580)"
+  },
+  {
+   "case": "B-replication-croise",
+   "expected_family": "kafka_replication",
+   "samples": 16,
+   "unreachable": 8,
+   "verdict_counts": {
+    "healthy": 7,
+    "kafka_replication": 1
+   },
+   "causes_seen": [
+    "replication_catchup",
+    "upstream_stopped_normal"
+   ],
+   "convergence": {
+    "converged": true,
+    "checks": {
+     "generated_vs_raw": true,
+     "decisions_vs_generated": true,
+     "outcome_vs_decisions": true,
+     "db_vs_outcome": true,
+     "persistence_gaps_zero": true,
+     "consumers_caught_up": true
+    },
+    "values": {
+     "generated": 600,
+     "validated": 600,
+     "rejected": 0,
+     "outcome_count": 600,
+     "raw_topic_end_offsets": 600,
+     "validated_topic_end_offsets": 600,
+     "rejected_topic_end_offsets": 0,
+     "outcome_topic_end_offsets": 600,
+     "db_validated_count": 600,
+     "db_rejected_count": 0,
+     "persistence_gap_valid": 0,
+     "persistence_gap_rejected": 0,
+     "lag_max": 0,
+     "payload_timestamp": "2026-11-05T15:34:01.558387+00:00"
+    }
+   },
+   "final_counts": {
+    "generated": 600,
+    "validated": 600,
+    "rejected": 0,
+    "outcome_count": 600,
+    "raw_topic_end_offsets": 600,
+    "validated_topic_end_offsets": 600,
+    "rejected_topic_end_offsets": 0,
+    "outcome_topic_end_offsets": 600,
+    "db_validated_count": 600,
+    "db_rejected_count": 0,
+    "persistence_gap_valid": 0,
+    "persistence_gap_rejected": 0,
+    "lag_max": 0,
+    "payload_timestamp": "2026-11-05T15:34:01.558387+00:00"
+   },
+   "incident_families_seen": [
+    "kafka_replication"
+   ],
+   "recheck": {
+    "réplication_détectée": true
+   },
+   "non_confusion": "PASS",
+   "non_confusion_detail": "verdict `kafka_replication` retranché par la capture tp-kafka-final.txt (brokers/contrôleur/URP en direct), pas par un dashboard"
+  },
+  {
+   "case": "C-rattrapage",
+   "expected_family": "persistence",
+   "samples": 32,
+   "unreachable": 16,
+   "verdict_counts": {
+    "healthy": 13,
+    "persistence": 3
+   },
+   "causes_seen": [
+    "postgres_unavailable",
+    "service_down:postgres",
+    "upstream_stopped_normal"
+   ],
+   "convergence": {
+    "converged": true,
+    "checks": {
+     "generated_vs_raw": true,
+     "decisions_vs_generated": true,
+     "outcome_vs_decisions": true,
+     "db_vs_outcome": true,
+     "persistence_gaps_zero": true,
+     "consumers_caught_up": true
+    },
+    "values": {
+     "generated": 800,
+     "validated": 800,
+     "rejected": 0,
+     "outcome_count": 800,
+     "raw_topic_end_offsets": 800,
+     "validated_topic_end_offsets": 800,
+     "rejected_topic_end_offsets": 0,
+     "outcome_topic_end_offsets": 800,
+     "db_validated_count": 800,
+     "db_rejected_count": 0,
+     "persistence_gap_valid": 0,
+     "persistence_gap_rejected": 0,
+     "lag_max": 0,
+     "payload_timestamp": "2026-11-05T15:39:33.518920+00:00"
+    }
+   },
+   "final_counts": {
+    "generated": 800,
+    "validated": 800,
+    "rejected": 0,
+    "outcome_count": 800,
+    "raw_topic_end_offsets": 800,
+    "validated_topic_end_offsets": 800,
+    "rejected_topic_end_offsets": 0,
+    "outcome_topic_end_offsets": 800,
+    "db_validated_count": 800,
+    "db_rejected_count": 0,
+    "persistence_gap_valid": 0,
+    "persistence_gap_rejected": 0,
+    "lag_max": 0,
+    "payload_timestamp": "2026-11-05T15:39:33.518920+00:00"
+   },
+   "incident_families_seen": [
+    "persistence",
+    "persistence",
+    "persistence"
+   ],
+   "recheck": {
+    "panne_détectée": true,
+    "rattrapage_complet": true,
+    "db_total": 800,
+    "outcome": 800
+   },
+   "non_confusion": "PASS",
+   "non_confusion_detail": "le moteur a nommé `persistence` pendant la panne ; convergence finale (outcome==db_total, écarts 0) : PostgreSQL rejoint après retour, rattrapage complet, AUCUNE perte mesurée"
+  },
+  {
+   "case": "rejets-metier",
+   "expected_family": null,
+   "samples": 17,
+   "unreachable": 9,
+   "verdict_counts": {
+    "healthy": 8
+   },
+   "causes_seen": [
+    "upstream_stopped_normal"
+   ],
+   "convergence": {
+    "converged": true,
+    "checks": {
+     "generated_vs_raw": true,
+     "decisions_vs_generated": true,
+     "outcome_vs_decisions": true,
+     "db_vs_outcome": true,
+     "persistence_gaps_zero": true,
+     "consumers_caught_up": true
+    },
+    "values": {
+     "generated": 300,
+     "validated": 0,
+     "rejected": 300,
+     "outcome_count": 300,
+     "raw_topic_end_offsets": 300,
+     "validated_topic_end_offsets": 0,
+     "rejected_topic_end_offsets": 300,
+     "outcome_topic_end_offsets": 300,
+     "db_validated_count": 0,
+     "db_rejected_count": 300,
+     "persistence_gap_valid": 0,
+     "persistence_gap_rejected": 0,
+     "lag_max": 0,
+     "payload_timestamp": "2026-11-05T15:42:51.108513+00:00"
+    }
+   },
+   "final_counts": {
+    "generated": 300,
+    "validated": 0,
+    "rejected": 300,
+    "outcome_count": 300,
+    "raw_topic_end_offsets": 300,
+    "validated_topic_end_offsets": 0,
+    "rejected_topic_end_offsets": 300,
+    "outcome_topic_end_offsets": 300,
+    "db_validated_count": 0,
+    "db_rejected_count": 300,
+    "persistence_gap_valid": 0,
+    "persistence_gap_rejected": 0,
+    "lag_max": 0,
+    "payload_timestamp": "2026-11-05T15:42:51.108513+00:00"
+   },
+   "incident_families_seen": [],
+   "rejection_check": {
+    "rejets_compteurs": 300,
+    "rejets_en_pg": 300,
+    "coherence": true,
+    "aucun_incident_sonné": true
+   },
+   "non_confusion": "PASS",
+   "non_confusion_detail": "rejets métier = 300 vus / 300 en PG, cohérents ; le diagnostic n'a sonné AUCUN incident (rejet métier ≠ incident)"
+  }
+ ]
+}

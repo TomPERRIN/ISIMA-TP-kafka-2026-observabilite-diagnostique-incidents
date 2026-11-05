@@ -1,0 +1,4 @@
+{"t_epoch":1793892613,"event":"case_start","detail":"env SIMULPIX_REPLICATION_OUTAGE_SECONDS_OVERRIDE=20 SIMULPIX_REPLICATION_PAUSED_BROKER_OVERRIDE=kafka-3 ./scripts/run-scenario.sh replication_lag 600 20"}
+{"t_epoch":1793892638,"event":"baseline_captured","detail":"t0"}
+{"t_epoch":1793892717,"event":"scenario_ready","detail":""}
+{"t_epoch":1793892841,"event":"case_end","detail":""}
