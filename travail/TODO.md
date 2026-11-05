@@ -9,7 +9,7 @@
 ## Table des matières
 
 1. [Phase 2 — Terminer l'état des lieux ✅](#1-phase-2--terminer-létat-des-lieux-✅)
-2. [Phase 3 — Conception de l'outil de diagnostic](#2-phase-3--conception-de-loutil-de-diagnostic) (matrice ✅, automatisation ⬜)
+2. [Phase 3 — Conception de l'outil de diagnostic](#2-phase-3--conception-de-loutil-de-diagnostic) (matrice ✅, automatisation ✅)
 3. [Phase 4 — Automatisation des essais](#3-phase-4--automatisation-des-essais)
 4. [Phase 5 — Vérification croisée](#4-phase-5--vérification-croisée)
 5. [Phase 6 — Livrables et preuves](#5-phase-6--livrables-et-preuves)
@@ -66,23 +66,55 @@ Les enseignements clés pour la suite :
 **⚠️ La matrice est MANUELLE** : la contribution attendue est de la rendre **automatique** (voir 2.2).
 **⚠️ Probabilités = hypothèses de travail** : la Phase 4 les transformera en fréquences mesurées.
 
-### 2.2 Automatiser la matrice (le cœur de la contribution) ⬜
+### 2.2 Automatiser la matrice (le cœur de la contribution) ✅
 
-- ⬜ Concevoir l'apport concret (au moins **un** parmi) :
-  - une métrique dérivée ;
-  - une alerte ;
-  - une vue (dashboard/HTTP) ;
-  - une commande de diagnostic.
+Apport choisi : **commande de diagnostic** (`scripts/diagnose.sh`) — moteur pur testable
+(`scripts/lib/diagnose_engine.py`), CLI d'état (`scripts/lib/diagnose_cli.py`, cache
+`runtime/diagnostic-cache.json`), conforme au plan d'architecture §6.
+
+- ✅ Concevoir l'apport concret (au moins **un** parmi) :
+  - ~~une métrique dérivée~~ (partie du travail du socle `service-health`, déjà présente) ;
+  - ~~une alerte~~ (le socle alerte déjà sur `down`/`degraded`/lag : le moteur relie au lieu de doubler) ;
+  - ~~une vue (dashboard/HTTP)~~ (différée : voir note plus bas) ;
+  - ✅ une **commande de diagnostic** : `scripts/diagnose.sh` (`--json`, `--watch N`, `--single`, `--reset`).
 
   Exigences du minimum :
-  - couvrir les situations **A, B et C** (dont une dégradation **OU** une indisponibilité PostgreSQL) ;
-  - distinguer **automatiquement** au moins **2 causes plausibles d'un même symptôme** (la matrice v1 donne les 5 lignes à coder) ;
-  - si les données ne permettent pas de trancher, afficher un état **« indéterminé »** + la vérification suivante à mener.
-- ⬜ Intégrer le **garde-fou fraîcheur** (critère #6) : âge max des mesures utilisées affiché à côté du diagnostic ; sondes périmées → « indéterminé », jamais une conclusion fausse.
-- ⬜ Prévoir une **vérification indépendante** de la cause (croiser offsets/API Kafka avec le contenu réel de PostgreSQL — `tp-kafka.sh` + `tp-db.sh` — pas seulement un graphique).
-- ⬜ Tester la machine à états par un **test unitaire** (critère #5 : toute conclusion ≠ indéterminé exige la double lecture Kafka ET PostgreSQL).
-- ⬜ Codifier les règles de la matrice v1 : chaque ligne (5 symptômes × 2 causes) devient une règle de croisement du moteur (voir architecture cible §4).
-- ⬜ Reporter le **classement probabilité / criticité** dans la sortie du moteur : présenter les causes dans l'ordre « priorité d'examen » (critique d'abord si vérification rapide), pas seulement « probable d'abord ».
+  - ✅ couvrir les situations **A, B et C** (lignes 1/3/5 de la matrice, dont l'indisponibilité
+    PostgreSQL : `services.postgres down`, `details.postgres.status` dégradé, `db_*` figé ;
+    et la dégradation : `persister_slow` via l'écart de persistance qui S'ACCROÎT) ;
+  - ✅ distinguer **automatiquement** au moins **2 causes plausibles d'un même symptôme**
+    : sortie `plausible_causes[]` (chaque cause = id/label/probabilité/criticité/priorité
+    d'examen/status `confirmed|probable|excluded|hypothesis`), discriminants de la
+    matrice codés (URP+offline/broker_count ; lag persisters + écart croissant vs lag
+    lecteur ; file vs latence>SLA ; réseau actif vs service down) ;
+  - ✅ si les données ne permettent pas de trancher, état **« indéterminé »** + vérification
+    suivante (`indeterminate_reason` ∈ {needs_second_sample, probes_stale, data_missing,
+    contradictory_signals, ambiguous_sla, ambiguous_non_dominated, probe_blinded,
+    service_down_transversal} + `next_check[]` avec commandes concrètes).
+- ✅ Intégrer le **garde-fou fraîcheur** (critère #6) : sortie `freshness` (âge du payload
+  ET de l'instantané réplication affichés, limite 75 s) ; sondes périmées →
+  `indeterminate/probes_stale`, jamais une conclusion (test `test_stale_probes_never_conclude…`).
+  *Calibrage : seuil 75 s sur cadence collecteur mesurée ~20 s — à re-vérifier en phase 4.*
+- ✅ Prévoir une **vérification indépendante** de la cause : chaque règle produit des
+  `evidence[]` à double lecture (`source` = kafka / postgres / platform) et `next_check`
+  pointe `tp-kafka.sh` / `tp-db.sh` + re-lecture `diagnose.sh --watch` (jamais un dashboard seul).
+- ✅ Tester la machine à états par un **test unitaire** (critère #5) :
+  `cd scripts/lib && python3 -m unittest test_diagnose_engine` — **26 tests OK**
+  (chaque ligne × 2 causes, témoin nominal : pas de faux positif éclair/rattrapage/idle,
+  probes_stale, data_missing, reset de l'environnement, ordres de priorité, sérialisation).
+- ✅ Codifier les règles de la matrice v1 : les 5 lignes sont des règles de croisement ;
+  toute conclusion sur un compteur en hausse exige **2 échantillons espacés ≥ 10 s**
+  (anti « lag éclair » nominal) ; discriminateur « l'écart qui S'ACCROÎT » (≥ 5 entre 2
+  lectures) pour la persistance lente ; rattrapage (écart décroissant) = healthy noté.
+- ✅ Reporter le **classement probabilité / criticité** dans la sortie : champs
+  `probability`/`criticality` de la cause dominante + `plausible_causes[]` dans l'ordre
+  « priorité d'examen » de la matrice (vérification critique rapide d'abord, ex :
+  broker arrêté vérifié avant de conclure au retard de copie).
+
+**Note architecture** : l'intégration optionnelle côté `service-health` (vue HTTP/panneau)
+est **différée après la campagne d'essais phase 4** — le moteur ne modifie PAS le socle
+(aucun rebuild d'image nécessaire pendant la boucle d'essais). La suite phase 4 :
+`scripts/diagnostic-campaign.sh` (enchaîner incidents + témoin + relevés).
 
 ---
 

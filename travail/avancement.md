@@ -15,7 +15,7 @@
 | Formulation de la garantie | ✅ fait | Garantie #1 retenue, seuil 30 s justifié |
 | État des lieux des métriques | ✅ fait | Inventaire complet (§1-§4 + synthèse, pull 04/11) |
 | Matrice symptôme / cause / vérification | ✅ fait (v1) | `notes/matrice-symptomes-causes.md` — 5 lignes + classement probabilité/criticité, **manuelle** (commit `05c67db`) |
-| Automatisation de la matrice (le produit) | ⬜ à faire | Rendre les règles automatiques : métrique dérivée / alerte / vue / commande |
+| Automatisation de la matrice (le produit) | ✅ fait (05/11) | `scripts/diagnose.sh` + moteur `scripts/lib/diagnose_engine.py` (4 états + 26 test units) — couverture A/B/C, double lecture, fraîcheur ; vue HTTP différée (phase 4) |
 | Incidents provoqués et mesurés | ⬜ à faire | Familles A, B, C + témoin nominal |
 | Livrables finaux | ⬜ à faire | Note de conception, protocole, guide |
 
@@ -90,6 +90,56 @@
   - top 3 à surveiller : **PostgreSQL indisponible** (seule cause **Critique** du lot, perte durable) > **broker arrêté** (near-miss : à min ISR=2, un 2e incident rend les écritures impossibles) > **retard de lecture qui dure** (fréquent, devient impact SLA massif si non détecté dans les 30 s) ;
   - ⚠️ hypothèses de travail : la Phase 4 transformera ces probabilités en fréquences **mesurées**.
 
+### 1.6 Automatisation de la matrice — moteur de diagnostic (05/11/2026)
+
+La matrice v1 est maintenant **codée dans un moteur** (apport = commande de diagnostic,
+conformément au plan d'architecture §4 et §6). ⚠️ Contexte : l'essai du 03/11 (diagnose.py,
+intégration service-health, scripts d'essais) n'avait pas été commité et a été perdu au
+pull du 04/11 — le moteur est reconstruit **hors service-health** (module + CLI), décision
+consolidée ci-dessous dans le journal.
+
+- `scripts/lib/diagnose_engine.py` — module **pur stdlib**, sans effet de bord :
+  - `build_verdict(payload, now, previous, config)` : un payload `/health/details`
+    (+ l'échantillon précédent du cache) → verdict JSON ; aucune nouvelle sonde.
+  - Les **5 lignes de la matrice** = règles de croisement, chaque symptôme aboutit à
+    `plausible_causes[]` (libellés matrice + probabilité/criticité/**priorité d'examen**,
+    status `confirmed|probable|excluded|hypothesis`) et à la cause dominante.
+  - **4 familles + healthy** : `consumer_backlog` (A) / `kafka_replication` (B) /
+    `persistence` (C) / `indeterminate` (+ `healthy`, cause expliquée : fin de scénario
+    normale `upstream_stopped_normal`, rattrapage éclair…) — cf. plan §4.
+  - **Discriminants codés** : ligne 2 = `offline_partitions_count`/contrôleur/`broker_count`
+    < 3 → broker arrêté (vérifié avant de conclure au retard de copie) ; ligne 1 =
+    lag sur persisters + **écart de persistance qui S'ACCROÎT** (≥ 5) → PostgreSQL ne suit
+    plus, lag lecteur persistant/montant → retard de lecture ; ligne 3 = `generated` stagne
+    vs monte ; ligne 4 = file longue vs file vide + `avg_validation_latency_ms` > SLA
+    (comparé à `ui.decision_sla_seconds`, chaîne à parser) ; ligne 5 = `services.<nom>`
+    + `details.network.active` (sonde éventuellement aveuglée).
+  - **Garde-fous** : fraîcheur (critère #6 : âge payload + âge `replication.captured_at`,
+    limite 75 s calibrée sur la cadence collecteur mesurée ~20 s → sondes périmées =
+    `indeterminate/probes_stale`, jamais une conclusion) ; double lecture (critère #5 :
+    `evidence[]` taguée kafka/postgres/platform, lectures manquantes = `data_missing`) ;
+    2 échantillons espacés ≥ 10 s pour conclure sur un compteur en hausse (anti « lag
+    éclair » nominal) ; détection d'un nouvel environnement (compteurs qui baissent =
+    cache rejeté) ; `indeterminate_reason` + `next_check[]` (commandes concrètes :
+    `tp-kafka.sh`, `tp-db.sh`, `diagnose.sh --watch 15`) — jamais de silence.
+- `scripts/lib/diagnose_cli.py` — CLI d'état : fusionne l'échantillon courant dans
+  `runtime/diagnostic-cache.json` (2 lectures max), rend le verdict en JSON (``--json``)
+  ou en **texte français** (état/cause/preuves/causes plausibles/fraîcheur/prochains contrôles).
+- `scripts/diagnose.sh` — la commande de diagnostic : `--json`, `--watch N` (deltas
+  réels), `--single` (sans état : les règles à deltas tombent sur « indéterminé : relire »),
+  `--reset` ; URL via `SIMULPIX_HEALTH_URL` ; seuils via env `SIMULPIX_DIAG_*`.
+- `scripts/lib/test_diagnose_engine.py` — **26 tests OK** (`cd scripts/lib &&
+  python3 -m unittest test_diagnose_engine`) : chaque ligne × 2 causes, témoin nominal
+  (lag éclair 1, rattrapage, idle résiduel = healthy, **0 faux positif sur ces cas**),
+  sondes périmées, lectures manquantes, reset d'environnement, sérialisation JSON.
+- Vérification bout en bout (CLI, payload nominal de référence décalé « maintenant») :
+  lag 132 à 1 lecture → **indeterminate/needs_second_sample** ; re-lecture 11,2 s plus tard
+  → **retard de consommateur (A) / `reader_backlog` avec 2 lectures** — cohérent avec la
+  garantie (≤ 30 s) ; `probes_stale` confirmé sur un payload vieilli de 300 s.
+- 🟡 Reste à calibrer en phase 4 sur la plateforme réelle : seuil de fraîcheur exact, tailles
+  de seuils sur incidents provoqués (les fixtures unitaires sont synthétiques), et la
+  démonstration des essais (justesse/délai/faux positifs).
+
 ---
 
 ## 2. Journal des décisions
@@ -104,6 +154,10 @@
 | 04/11/2026 | État des lieux **terminé** : inventaire métriques complet (pull `95556a5` + `a394db6`) — Phase 2 close |
 | 04/11/2026 | **Matrice symptôme / cause / vérification v1** (`05c67db`, auteur anayel) : 5 lignes de diagnostic, manuelle — à automatiser |
 | 04/11/2026 | **Classement probabilité / criticité** ajouté à la matrice : échelles qualitatives, priorité d'examen (critique d'abord si vérification rapide), top 3 = PostgreSQL > broker > retard qui dure — à valider en Phase 4 |
+| 05/11/2026 | **Perte du travail du 03/11** (non commité : diagnose.py dans service-health, scripts d'essais, preuves phase 3/4) au pull du 04/11 ; leçons validées conservées (cadence ~20 s, règle 2 échantillons, discriminateur « écart qui S'ACCROÎT ») et ré-appliquées |
+| 05/11/2026 | Architecture du moteur : **module pur `scripts/lib/diagnose_engine.py` + CLI `scripts/diagnose.sh`**, PAS d'intégration dans `service-health` (rebuild image à chaque itération pénaliserait la campagne) ; vue HTTP/panneau différée après la phase 4 |
+| 05/11/2026 | Sortie du moteur à **4 états + healthy** avec cause nommée, `plausible_causes[]` ordonnée par priorité d'examen, `evidence[]` double lecture, garde-fou fraîcheur 75 s, 2 échantillons ≥ 10 s pour les deltas |
+| 05/11/2026 | **Moteur écrit + 26 tests OK** ; essai CLI bout en bout validé hors plateforme (fixtures du payload nominal de référence) ; campagne live (phase 4) en attente de Docker/WSL réactivé |
 
 ---
 
@@ -120,14 +174,24 @@
 
 ## 4. En cours
 
-Rien en cours — la matrice v1 est posée ; l'étape suivante est son automatisation (Phase 3).
+Rien en cours — le moteur de diagnostic est posé et testé (Phase 3 close). L'étape suivante
+est la campagne d'essais (Phase 4), bloquée en live tant que Docker n'est pas ré-intégré à
+WSL (settings Docker Desktop → Resources → WSL integration → Ubuntu).
 
 ---
 
 ## 5. Prochaines étapes
 
-1. **Automatiser la matrice v1** : coder les 5 règles de croisement (métrique dérivée / alerte / vue / commande de diagnostic) → Phase 3.
-2. Intégrer le garde-fou fraîcheur (critère #6) et le test unitaire de la machine à états (critère #5) → Phase 3.
-3. Scripter les 3 incidents + témoin, lancer la campagne de mesures (justesse, délai ≤ 30 s, faux positifs) → Phase 4.
-4. Vérification croisée Kafka ↔ PostgreSQL sur chaque conclusion → Phase 5.
-5. Rédiger les livrables (note de conception, protocole, guide praticien) → Phase 6.
+1. **Campagne d'essais** (Phase 4) : scripter les 3 incidents (A/B/C) + témoin nominal dans
+   `scripts/diagnostic-campaign.sh`, lancer la campagne ;
+   mesurer **justesse** (critère #1 : 100 % des cas connus), **délai de détection**
+   (critère #3 : ≤ 30 s), **faux positifs** (critère #4 : 0 sur ≥ 5 nominaux), et
+   calibrer les seuils du moteur (fraîcheur 75 s, lag 10, gap 5) sur la plateforme réelle.
+2. **Vérification croisée** (Phase 5) : chaque conclusion contre Kafka ET PostgreSQL
+   (`tp-kafka.sh`, `tp-db.sh`) ; démonstration non-confusion backlog/rejet métier/perte
+   (candidate de garantie #2).
+3. **Livrables** (Phase 6) : guide praticien (`docs/operations/guide-diagnostic.md`), note
+   de conception (`docs/architecture/diagnostic-engine-design.md`), relevés dans `preuves/`.
+4. vue HTTP/panneau Grafana du moteur — uniquement **après** la campagne (rebuilds
+   d'images = temps perdu pendant les essais, cf. décision 05/11).
+
