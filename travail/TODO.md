@@ -10,7 +10,7 @@
 
 1. [Phase 2 — Terminer l'état des lieux ✅](#1-phase-2--terminer-létat-des-lieux-✅)
 2. [Phase 3 — Conception de l'outil de diagnostic](#2-phase-3--conception-de-loutil-de-diagnostic) (matrice ✅, automatisation ✅)
-3. [Phase 4 — Automatisation des essais](#3-phase-4--automatisation-des-essais)
+3. [Phase 4 — Automatisation des essais ✅](#3-phase-4--automatisation-des-essais-✅)
 4. [Phase 5 — Vérification croisée ✅](#4-phase-5--vérification-croisée-✅)
 5. [Phase 6 — Livrables et preuves](#5-phase-6--livrables-et-preuves)
 6. [Phase 7 — Extension (si temps)](#6-phase-7--extension-si-temps)
@@ -64,7 +64,9 @@ Les enseignements clés pour la suite :
   - **top 3 à surveiller** : PostgreSQL indisponible (seule cause critique) > broker arrêté (near-miss à min ISR=2) > retard de lecture qui dure (fréquent, impact SLA si > 30 s).
 
 **⚠️ La matrice est MANUELLE** : la contribution attendue est de la rendre **automatique** (voir 2.2).
-**⚠️ Probabilités = hypothèses de travail** : la Phase 4 les transformera en fréquences mesurées.
+**⚠️ Probabilités = hypothèses de travail** : la Phase 4 les a transformées en mesures
+réelles — délais de détection observés 15/25/14/3 s (max 25 s ≤ 30 s), 0 faux positif
+sur 5 témoins ; la Phase 5 a démontré la non-confusion (4/4 PASS).
 
 ### 2.2 Automatiser la matrice (le cœur de la contribution) ✅
 
@@ -112,13 +114,13 @@ Apport choisi : **commande de diagnostic** (`scripts/diagnose.sh`) — moteur pu
   broker arrêté vérifié avant de conclure au retard de copie).
 
 **Note architecture** : l'intégration optionnelle côté `service-health` (vue HTTP/panneau)
-est **différée après la campagne d'essais phase 4** — le moteur ne modifie PAS le socle
-(aucun rebuild d'image nécessaire pendant la boucle d'essais). La suite phase 4 :
-`scripts/diagnostic-campaign.sh` (enchaîner incidents + témoin + relevés).
+est **différée après la phase 6** (livrables en priorité ; le moteur ne modifie PAS le
+socle). ✅ La suite prévue (phase 4) est faite : `scripts/diagnostic-campaign.sh`
+(enchaîner incidents + témoin + relevés) + campagne croisée phase 5 `scripts/cross-check.sh`.
 
 ---
 
-## 3. Phase 4 — Automatisation des essais
+## 3. Phase 4 — Automatisation des essais ✅
 
 **Objectif : scripter les incidents + le témoin, et mesurer les critères de la garantie (justesse, délai ≤ 30 s, faux positifs, fraîcheur).**
 
@@ -185,8 +187,12 @@ preuves dans `preuves/phase5-croisee-2026-11-05/`.
 
 - ⬜ **Guide de diagnostic reproductible**, utilisable par un autre groupe pendant un incident (recette praticienne pas à pas) → cible : `docs/operations/guide-diagnostic.md`.
 - ⬜ **Note de conception courte** (choix techniques + justification des seuils) → cible : `docs/architecture/diagnostic-engine-design.md`.
-- ⬜ **Protocole d'essai exécutable par un autre groupe** (commandes, scénarios, valeurs attendues).
-- ⬜ **Relevés pour au moins 3 situations distinctes** (+ le témoin nominal) → `preuves/phase4-*/`.
+- ✅ **Protocole d'essai exécutable par un autre groupe** (commandes, scénarios, valeurs attendues)
+  → [`notes/protocole-campagne-phase4.md`](notes/protocole-campagne-phase4.md) +
+  [`notes/protocole-phase5-croisee.md`](notes/protocole-phase5-croisee.md).
+- ✅ **Relevés pour au moins 3 situations distinctes** (+ le témoin nominal) → couvert :
+  `preuves/phase4-campagne-2026-11-05/` (4 incidents + 5 témoins) et
+  `preuves/phase5-croisee-2026-11-05/` (4 cas croisés Kafka+PG).
 - ⬜ **L'amélioration d'observabilité réellement exploitable** (le produit : commande de diagnostic / vue / alerte).
 - ⬜ Déposer les preuves **synthétiques et rejouables** dans `preuves/` (pas les sorties volumineuses de `runtime/`, qui restent exclues).
 - ⬜ **Conclusion** qui dit ce que la garantie couvre et ne couvre pas ; un résultat négatif est recevable s'il est rigoureusement établi.
