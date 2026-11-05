@@ -18,7 +18,7 @@
 | Automatisation de la matrice (le produit) | ✅ fait (05/11) | `scripts/diagnose.sh` + moteur `scripts/lib/diagnose_engine.py` (4 états + 26 tests unitaires) — couverture A/B/C, double lecture, fraîcheur ; vue HTTP différée |
 | Incidents provoqués et mesurés | ✅ fait (05/11) | Campagne phase 4 (`scripts/diagnostic-campaign.sh`) : **justesse 4/4, délai max 25 s, 0 FP sur 5 témoins** — `preuves/phase4-campagne-2026-11-05/` |
 | Vérification croisée + non-confusion (phase 5) | ✅ fait (05/11) | `scripts/cross-check.sh` : 4 cas → **4/4 PASS**, chaque conclusion cross-checkée Kafka+PG, fermeture single-snapshot compteurs==PG — candidate #2 démontrée (`preuves/phase5-croisee-2026-11-05/`) |
-| Livrables finaux | ⬜ à faire | Guide praticien, note de conception (protocoles campagne §1.7 et croisée §1.8 déjà écrits) |
+| Livrables finaux (guide, note de conception, conclusion) | ✅ fait (05/11) | `docs/operations/guide-diagnostic.md` + `docs/architecture/diagnostic-engine-design.md` (portée/limites = conclusion) ; protocoles + relevés déjà en place (§1.7/§1.8) |
 
 ---
 
@@ -226,6 +226,39 @@ résultat (0 perte provoquable par une simple panne de PG) est documenté tel qu
 
 ---
 
+### 1.9 Livrables et conclusions — phase 6 (05/11/2026)
+
+Deux documents finaux, alignés sur les preuves des phases 2-5 (chaque affirmation cite
+un relevé) :
+
+- **[`docs/operations/guide-diagnostic.md`](../docs/operations/guide-diagnostic.md)**
+  — le guide praticien demandé par le sujet (« ce qu'un autre groupe peut suivre pendant
+  un incident ») : prérequis, la commande et ses 5 modes, lecture d'une sortie (copie
+  d'un verdict RÉEL), les 5 verdicts × 8 causes nommées + vérifications indépendantes,
+  la procédure en 4 pas, les 3 situations de la mission rejouées (timelines réelles de
+  la phase 5, dont la transition `indeterminate/ambiguous_sla` — l'exemple parfait du
+  « ne pas conclure »), la règle de non-confusion (fermeture), les pièges anti-pattern,
+  le dépannage, et §10 « ce que la garantie couvre — et ne couvre pas » (résultat
+  négatif : aucune perte provoquable, assumé) ;
+- **[`docs/architecture/diagnostic-engine-design.md`](../docs/architecture/diagnostic-engine-design.md)**
+  — la note de conception : 3 décisions structurantes (moteur pur hors socle, cache 2
+  échantillons, relevé mutualisé), pipeline (garde-fou fraîcheur → règles croissantes →
+  4 états), catalogue des 8 causes et des 7 raisons `indeterminate`, chaque seuil
+  justifié par une mesure (`SIMULPIX_DIAG_*`), le contrôle de fermeture (fermeture
+  single-snapshot), les 26 tests + campagnes, et §9 « portée et limites » (conclusion).
+
+La « conclusion » du livrable (ce que la garantie couvre / ne couvre pas) est donc
+doublée côté praticien (guide §10) et côté conception (note §9) ; les limites validées
+en campagne (collecteur arrêté ne gèle pas le payload ; délai B inclut le snapshot
+réplication ; aucune perte provoquable) y sont citées avec leur source.
+
+Avec phases 2-5 closes, les preuves attendues du sujet sont toutes couvertes : matrice
+(`notes/matrice-symptomes-causes.md`), relevés ≥ 3 situations + témoin
+(`preuves/phase4-…`, `preuves/phase5-…`), amélioration exploitée (`diagnose.sh`),
+démonstration de non-confusion (`SYNTHESE.md` phase 5), guide reproductible.
+
+---
+
 ## 2. Journal des décisions
 
 | Date | Décision |
@@ -247,6 +280,8 @@ résultat (0 perte provoquable par une simple panne de PG) est documenté tel qu
 | 05/11/2026 | **Phase 5 (vérification croisée) tournée** : 4/4 PASS — A : backlog drainé, 580 rejets TTL **persistés** (≠ perte) ; C : rattrapage complet (0 perte mesurée) ; rejets-metier : rejet ≠ incident (0 verdict d'incident) ; B : verdict cross-checké sur Kafka en direct. Candidate **#2** démontrée |
 | 05/11/2026 | Convergence redéfinie en **fermeture single-snapshot** (`generated==raw_end==validated+rejected==outcome==db_total`, écarts 0, lag ≤ 5) : les deltas inter-cas sont interdits — `run-scenario.sh` relance service-health (compteurs re-calculés à chaque cas) |
 | 05/11/2026 | Enregistreur de verdicts **mutualisé** (`scripts/lib/record-verdicts.sh`, campagne phase 4 refactorée dessus) ; bug `REPO_DIR` à un cran corrigé (v1 : 100 % `unreachable`) |
+| 05/11/2026 | **Phase 6 (livrables) écrite** : guide praticien + note de conception (seuils justifiés par les mesures) ; la « conclusion » est double : guide §10 (praticien) + note §9 (conception), incluant le résultat négatif « aucune perte provoquable, les persisters rejouent » |
+| 05/11/2026 | Vue HTTP/panneau Grafana du moteur **définitivement différée** indiquée dans le livrable (décision phase 4 maintenue) ; la CLI est le produit |
 
 ---
 
@@ -263,25 +298,25 @@ résultat (0 perte provoquable par une simple panne de PG) est documenté tel qu
 
 ## 4. En cours
 
-Rien en cours — phase 4 (campagne) et phase 5 (vérification croisée) closes : les
-critères de la garantie #1 sont mesurés et tenus (justesse 4/4, délai max 25 s, 0 faux
-positif) et la candidate #2 (non-confusion backlog ≠ rejet métier ≠ perte) est démontrée
-(4/4 PASS, `preuves/phase5-croisee-2026-11-05/`). L'étape suivante est la phase 6
-(livrables : guide praticien, note de conception).
+Rien en cours — phases 2 à 6 closes. Les critères de la garantie #1 sont mesurés et
+tenus (justesse 4/4, délai max 25 s, 0 faux positif), la candidate #2 est démontrée
+(4/4 PASS) et les livrables finaux (guide praticien, note de conception, conclusion)
+sont édités avec les relevés en citations. Il reste (facultatif) la dimension
+théorique et le rendu GitHub final.
 
 ---
 
 ## 5. Prochaines étapes
 
-1. **Livrables** (Phase 6) : guide praticien (`docs/operations/guide-diagnostic.md`,
-   recette pas à pas `diagnose.sh` + `cross-check.sh` + `tp-kafka.sh`/`tp-db.sh` à
-   l'usage d'un autre groupe pendant un incident), note de conception
-   (`docs/architecture/diagnostic-engine-design.md`, choix techniques + justification
-   des seuils) ; les « relevés pour au moins 3 situations distinctes » sont déjà en
-   place (`preuves/phase4-campagne-…` + `preuves/phase5-croisee-…`).
-2. **Conclusion** : ce que la garantie couvre et ne couvre pas (dont : « aucune perte
-   n'a pu être provoquée, les persisters du socle rejouent toujours »), puis mise à
-   jour README et rendu GitHub final.
-3. Vue HTTP/panneau Grafana du moteur — reportée après la phase 6 (aucun rebuild
-   nécessaire ; différée à la phase 4 puis la phase 5).
+1. **Relecture croisée des livrables** (guide + note de conception) : vérifier le
+   pas à pas d'un praticien qui ne connaît pas le dépôt (tout doit converger vers
+   `preuves/` et les protocoles).
+2. **Phase 8 — dimension théorique (encouragée)** : formaliser les hypothèses de
+   cause / observations discriminantes / cas indéterminé ; consulter
+   `TP/SAé/analyse-recherche-limos.md` et préparer l'échange avec l'enseignant/LIMOS.
+3. **Phase 9 — rendu GitHub final** : README racine (sujet, garantie, démarche de
+   rejeu), vérifier pas de secrets ni de `runtime/` déposé, collaborateur invité,
+   puis dépôt en PUBLIC la veille de la soutenance.
+4. Phase 7 (extensions facultatives) si le temps le permet : impact métier (candidate
+   #7), détection adaptative, vue HTTP/Grafana.
 

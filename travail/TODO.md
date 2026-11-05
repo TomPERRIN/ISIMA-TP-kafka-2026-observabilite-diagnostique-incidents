@@ -12,7 +12,7 @@
 2. [Phase 3 — Conception de l'outil de diagnostic](#2-phase-3--conception-de-loutil-de-diagnostic) (matrice ✅, automatisation ✅)
 3. [Phase 4 — Automatisation des essais ✅](#3-phase-4--automatisation-des-essais-✅)
 4. [Phase 5 — Vérification croisée ✅](#4-phase-5--vérification-croisée-✅)
-5. [Phase 6 — Livrables et preuves](#5-phase-6--livrables-et-preuves)
+5. [Phase 6 — Livrables et preuves ✅](#5-phase-6--livrables-et-preuves-✅)
 6. [Phase 7 — Extension (si temps)](#6-phase-7--extension-si-temps)
 7. [Phase 8 — Dimension théorique](#7-phase-8--dimension-théorique)
 8. [Phase 9 — Rendu GitHub](#8-phase-9--rendu-github)
@@ -183,19 +183,33 @@ preuves dans `preuves/phase5-croisee-2026-11-05/`.
 
 ---
 
-## 5. Phase 6 — Livrables et preuves
+## 5. Phase 6 — Livrables et preuves ✅
 
-- ⬜ **Guide de diagnostic reproductible**, utilisable par un autre groupe pendant un incident (recette praticienne pas à pas) → cible : `docs/operations/guide-diagnostic.md`.
-- ⬜ **Note de conception courte** (choix techniques + justification des seuils) → cible : `docs/architecture/diagnostic-engine-design.md`.
+**Livrables édités le 05/11/2026.**
+
+- ✅ **Guide de diagnostic reproductible**, utilisable par un autre groupe pendant un
+  incident (recette praticienne pas à pas : réflexes, 5 verdicts, 4 pas, 3 situations
+  repliées avec preuves, fermeture backlog/rejet/perte, dépannage, couvert/non couvert)
+  → [`docs/operations/guide-diagnostic.md`](../docs/operations/guide-diagnostic.md).
+- ✅ **Note de conception courte** (choix techniques + justification de chaque seuil par
+  les mesures ; pipeline de décision, catalogue des 8 causes et 7 raisons
+  indéterminées, portée et limites = conclusion)
+  → [`docs/architecture/diagnostic-engine-design.md`](../docs/architecture/diagnostic-engine-design.md).
 - ✅ **Protocole d'essai exécutable par un autre groupe** (commandes, scénarios, valeurs attendues)
   → [`notes/protocole-campagne-phase4.md`](notes/protocole-campagne-phase4.md) +
   [`notes/protocole-phase5-croisee.md`](notes/protocole-phase5-croisee.md).
 - ✅ **Relevés pour au moins 3 situations distinctes** (+ le témoin nominal) → couvert :
   `preuves/phase4-campagne-2026-11-05/` (4 incidents + 5 témoins) et
   `preuves/phase5-croisee-2026-11-05/` (4 cas croisés Kafka+PG).
-- ⬜ **L'amélioration d'observabilité réellement exploitable** (le produit : commande de diagnostic / vue / alerte).
-- ⬜ Déposer les preuves **synthétiques et rejouables** dans `preuves/` (pas les sorties volumineuses de `runtime/`, qui restent exclues).
-- ⬜ **Conclusion** qui dit ce que la garantie couvre et ne couvre pas ; un résultat négatif est recevable s'il est rigoureusement établi.
+- ✅ **L'amélioration d'observabilité réellement exploitable** : la commande de
+  diagnostic `scripts/diagnose.sh` + moteur testé (26 tests) + campagnes et croisé
+  rejouables (voir §2-§4) — pas de vue : la CLI est le produit (décision §2, note §1).
+- ✅ Déposer les preuves **synthétiques et rejouables** dans `preuves/`
+  (phase 3 matrice, phase 4 campagne, phase 5 croisée ; les sorties volumineuses de
+  `runtime/` restent exclues du dépôt).
+- ✅ **Conclusion** qui dit ce que la garantie couvre et ne couvre pas : note de
+  conception §9 (« portée et limites ») + guide §10 ; le résultat négatif (aucune perte
+  provoquable : les persisters du socle rejouent toujours) y est explicitement assumé.
 
 ---
 
