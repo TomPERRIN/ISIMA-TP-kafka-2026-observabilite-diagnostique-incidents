@@ -4,6 +4,39 @@ Total output lines: 416
 # Simul-Pix
 
 Plateforme pédagogique locale autour de Kafka, construite autour d'un pipeline de paiements Pix simulés.
+## SAÉ 5 — Observabilité et diagnostic d'incidents
+>
+> Ce dépôt est dérivé du socle pédagogique **simul-pix**. Il contient la réalisation
+> du sujet 5 : aider un opérateur à passer d'un symptôme visible à une cause vérifiée,
+> en croisant les signaux déjà exposés par la météo, Grafana et les sondes
+> Kafka/PostgreSQL, sans ajouter de nouvelle sonde.
+>
+> **Garantie visée** — notre lecture d'incident ne doit pas confondre retard de
+> consommateur, réplication Kafka dégradée et panne de persistance PostgreSQL, prouvé
+> par une matrice validée sur incidents injectés : bonne cause retenue sur 100 % des
+> cas connus, état « indéterminé » + vérification suivante sinon.
+>
+> **Produit** : la commande [`./scripts/diagnose.sh`](scripts/diagnose.sh), appuyée sur
+> le moteur `scripts/lib/diagnose_engine.py` et 32 tests unitaires.
+>
+> **Documentation** :
+> - guide praticien : [`docs/operations/guide-diagnostic.md`](docs/operations/guide-diagnostic.md) ;
+> - note de conception : [`docs/architecture/diagnostic-engine-design.md`](docs/architecture/diagnostic-engine-design.md) ;
+> - preuves rejouables : [`preuves/`](preuves/).
+>
+> **Lancer la plateforme et rejouer les essais** :
+> ```bash
+> ./start.sh
+> ./scripts/diagnose.sh              # diagnostic ponctuel
+> ./scripts/diagnose.sh --watch 15   # suivi en continu
+> ./scripts/diagnostic-campaign.sh   # campagne phase 4 : incidents + témoins
+> ./scripts/cross-check.sh           # vérification croisée Kafka + PostgreSQL
+> ./scripts/impact-metier-proof.sh   # preuve impact métier
+> ./stop.sh
+> ```
+> Les essais live nécessitent Docker + Compose et environ 4 Go de RAM. Les seuils,
+> les résultats mesurés et les limites sont détaillés dans le guide et la note de
+> conception.
 
 ## Parcours étudiant
 
