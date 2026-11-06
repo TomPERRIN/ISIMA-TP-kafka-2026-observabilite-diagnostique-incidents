@@ -246,10 +246,10 @@ Archivée dans `preuves/phase2-recensement/reference-nominale-2026-11-03/` (run-
 
 ### 5.5 Reste à compléter dans l'inventaire (métriques-observabilite.md)
 
-- ⬜ **§2 Dashboards Grafana** : les 4 dashboards provisionnés (`simul-pix-incidents`, `simul-pix-kafka`, `simul-pix-persistence`, `simul-pix-pipeline`) — panneaux principaux, métriques sous-jacentes, seuils.
-- ⬜ **§3 `tp-kafka.sh`** : informations lisibles (offsets, lag, réplication, …).
-- ⬜ **§4 `tp-db.sh`** : compteurs PostgreSQL, doublons, écritures.
-- ⬜ **§5 Synthèse** : ce qui manque pour distinguer les 3 incidents de la mission, ambiguïtés observées entre signaux.
+- ✅ **§2 Dashboards Grafana** : les 4 dashboards provisionnés (`simul-pix-incidents`, `simul-pix-kafka`, `simul-pix-persistence`, `simul-pix-pipeline`) — panneaux principaux, métriques sous-jacentes, seuils. Complété puis **revérifié panneau par panneau contre les JSON provisionnés le 05/11/2026** (Madiak5) : contenu conforme, écarts corrigés (panneau « Aide de lecture », courbe « Retard de réplication », variantes « période affichée », absence de courbe dédiée pour l'« Ancienneté backlog ») — voir `metriques-observabilite.md` §2.6.
+- ✅ **§3 `tp-kafka.sh`** : informations lisibles (offsets, lag, réplication, …).
+- ✅ **§4 `tp-db.sh`** : compteurs PostgreSQL, doublons, écritures.
+- ✅ **§5 Synthèse** : ce qui manque pour distinguer les 3 incidents de la mission, ambiguïtés observées entre signaux.
 
 ### 5.6 Questions de conception — réponses de travail
 
