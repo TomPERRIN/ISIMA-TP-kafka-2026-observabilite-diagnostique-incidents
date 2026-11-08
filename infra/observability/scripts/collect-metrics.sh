@@ -289,6 +289,9 @@ while true; do
 
   printf ']}\n' >>"$json_tmp"
   mv "$json_tmp" "$RUNTIME_DIR/latest-replication.json"
+  # Adaptation NFS : mktemp crée le fichier en 600 et service-health (root,
+  # écrasé par root_squash sur NFS) ne peut pas le lire — rendre lisible.
+  chmod 644 "$RUNTIME_DIR/latest-replication.json" 2>/dev/null || true
 
   collect_service_health "$now_ns" "$line_file"
   write_influx "$line_file"
