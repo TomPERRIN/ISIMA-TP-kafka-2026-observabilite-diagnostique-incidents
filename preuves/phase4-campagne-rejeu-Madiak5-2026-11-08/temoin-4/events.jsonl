@@ -1,0 +1,4 @@
+{"t_epoch":1794149720,"event":"case_start","detail":"./scripts/run-scenario.sh nominal 200 10"}
+{"t_epoch":1794149720,"event":"scenario_launch","detail":"run-scenario.sh ./scripts/run-scenario.sh nominal 200 10"}
+{"t_epoch":1794149831,"event":"scenario_ready","detail":"t_launch=1794149720"}
+{"t_epoch":1794149920,"event":"case_end","detail":"window=75s"}
