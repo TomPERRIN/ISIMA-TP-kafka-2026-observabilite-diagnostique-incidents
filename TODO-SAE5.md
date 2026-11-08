@@ -101,7 +101,18 @@ Construire une **lecture d'incident** qui distingue **au moins 3 situations** :
 
 ### 3.3 Organisation d'équipe
 
-- ⬜ Former un groupe de 4 minimum, répartir les rôles (analyse, développement, essais, documentation), désigner un responsable d'intégration, prévoir un point de synchronisation par séance.
+✅ Réparti le 05/11/2026 (groupe de 4, conforme à `TP/SAé/README.md` : analyse, développement, essais, documentation ; un responsable d'intégration ; un point de synchronisation à chaque séance).
+
+| Membre | Rôle | Contributions |
+|---|---|---|
+| TomPERRIN | Développement + **responsable intégration** | moteur de diagnostic (`diagnose.sh`, `diagnose_engine.py` + tests), campagne automatisée phases 4-5, guide praticien, note de conception, impact métier ; relit et fusionne les PR, garantit `main` exécutable |
+| Ayel04 | Analyse | états des lieux (météo, dashboards, métriques restantes), inventaire d'observabilité (`metriques-observabilite.md`), matrice symptômes/causes (v1) |
+| Madiak5 | Documentation + revue | vérification croisée de l'inventaire contre les dashboards provisionnés (§2.6, 05/11), organisation d'équipe (cette section), README racine, relecture des livrables en « lecteur externe » (guide, note de conception), rejeu du protocole d'essai |
+| Ania | Essais indépendants + documentation | rejeu de la campagne (preuve « protocole exécutable par un autre groupe »), test du guide praticien pendant un incident, vérification de la fraîcheur des sondes |
+
+- **Responsable d'intégration** : TomPERRIN (PR #1, fusion des branches, `main` exécutable).
+- **Point de synchronisation** : à chaque séance (bilan fait/reste, répartition des prochaines tâches, push de la branche de chacun).
+- Les contributions non-code (revues, vérifications, rédaction) sont documentées dans ce TODO et les messages de commit, conformément aux attendus (« Rendez visibles les contributions individuelles »).
 
 ---
 

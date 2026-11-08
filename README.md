@@ -1,12 +1,9 @@
-Warning: truncated output (original token count: 4242)
-Total output lines: 416
-
 # Simul-Pix
 
 Plateforme pédagogique locale autour de Kafka, construite autour d'un pipeline de paiements Pix simulés.
 ## SAÉ 5 — Observabilité et diagnostic d'incidents
 >
-> Ce dépôt est dérivé du socle pédagogique **simul-pix**. Il contient la réalisation
+> Ce dépôt est dérivé du socle pédagogique [`simul-pix`](https://github.com/wiguyot/ISIMA-TP-kafka-2026). Il contient la réalisation
 > du sujet 5 : aider un opérateur à passer d'un symptôme visible à une cause vérifiée,
 > en croisant les signaux déjà exposés par la météo, Grafana et les sondes
 > Kafka/PostgreSQL, sans ajouter de nouvelle sonde.
@@ -16,12 +13,17 @@ Plateforme pédagogique locale autour de Kafka, construite autour d'un pipeline 
 > par une matrice validée sur incidents injectés : bonne cause retenue sur 100 % des
 > cas connus, état « indéterminé » + vérification suivante sinon.
 >
+> Mesures de la campagne du 05/11/2026 (`preuves/phase4-campagne-2026-11-05/`) :
+> **justesse 4/4** sur incidents connus, **0 faux positif** sur 5 témoins nominaux,
+> **délai de détection ≤ 25 s**.
+>
 > **Produit** : la commande [`./scripts/diagnose.sh`](scripts/diagnose.sh), appuyée sur
 > le moteur `scripts/lib/diagnose_engine.py` et 32 tests unitaires.
 >
 > **Documentation** :
 > - guide praticien : [`docs/operations/guide-diagnostic.md`](docs/operations/guide-diagnostic.md) ;
 > - note de conception : [`docs/architecture/diagnostic-engine-design.md`](docs/architecture/diagnostic-engine-design.md) ;
+> - matrice de diagnostic : `travail/notes/matrice-symptomes-causes.md` ;
 > - preuves rejouables : [`preuves/`](preuves/).
 >
 > **Lancer la plateforme et rejouer les essais** :
@@ -30,6 +32,7 @@ Plateforme pédagogique locale autour de Kafka, construite autour d'un pipeline 
 > ./scripts/diagnose.sh              # diagnostic ponctuel
 > ./scripts/diagnose.sh --watch 15   # suivi en continu
 > ./scripts/diagnostic-campaign.sh   # campagne phase 4 : incidents + témoins
+> ./scripts/diagnostic-campaign.sh --quick   # version réduite (2 témoins)
 > ./scripts/cross-check.sh           # vérification croisée Kafka + PostgreSQL
 > ./scripts/impact-metier-proof.sh   # preuve impact métier
 > ./stop.sh
@@ -37,6 +40,11 @@ Plateforme pédagogique locale autour de Kafka, construite autour d'un pipeline 
 > Les essais live nécessitent Docker + Compose et environ 4 Go de RAM. Les seuils,
 > les résultats mesurés et les limites sont détaillés dans le guide et la note de
 > conception.
+>
+> Protocoles détaillés : campagne (`travail/notes/protocole-campagne-phase4.md`) et
+> vérification croisée (`travail/notes/protocole-phase5-croisee.md`). Les scénarios
+> du socle se lancent comme décrit dans « Pilotage des scénarios » ci-dessous
+> (`./scripts/run-scenario.sh nominal 100 10`).
 
 ## Parcours étudiant
 
