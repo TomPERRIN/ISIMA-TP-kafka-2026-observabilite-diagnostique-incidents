@@ -229,8 +229,15 @@ preuves dans `preuves/phase5-croisee-2026-11-05/`.
     (SYNTHESE.md) : **6/6 checks** — moteur 278 == sonde PG 278 == SQL 278,
     delta contrôlé 0 == 0 à l'état fermé, total montant (13 → 238) puis stabilisé ;
     rejets métier « dans le SLA » jamais comptés comme dépassements.
-- 🎁 **Laissées en réserve** (note de conception §10) : détection adaptative
-  (seuils fixes réglables `SIMULPIX_DIAG_*`) ; vue HTTP / panneau Grafana.
+- ✅ **Vue Grafana permanente du diagnostic** (08/11/2026, sortie de réserve) :
+  dashboard provisionné `simul-pix-diagnostic` alimenté par l'exporteur
+  `scripts/diagnostic-export.sh` (métrique `simulpix_diagnostic` dans InfluxDB) ;
+  étiquette « État sain — aucun incident actif » quand le verdict est `healthy` ;
+  cycle incident C-postgres-indispo capturé (3 captures)
+  → [`preuves/phase6-grafana-diagnostic-2026-11-08/`](../preuves/phase6-grafana-diagnostic-2026-11-08/SYNTHESE.md).
+  **La CLI `diagnose.sh` reste la source de vérité** — socle du prof non touché.
+- 🎁 **Laissée en réserve** (note de conception §10) : détection adaptative
+  (seuils fixes réglables `SIMULPIX_DIAG_*`).
 
 ---
 

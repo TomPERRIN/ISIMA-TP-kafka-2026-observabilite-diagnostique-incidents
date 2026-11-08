@@ -216,8 +216,9 @@ vérifié en base à la ligne près (278 == 278, delta contrôlé 0 == 0).
   la branche « écart stable = perte » est codée (fermeture non atteinte à l'échéance)
   mais jamais déclenchée en campagne ; documenté tel quel, pas supposé ;
 - seuils **fixes** (extension adaptative non implémentée ; le sujet ne l'exige pas) ;
-- pas de vue HTTP/Grafana du moteur — la CLI est le produit livré, l'extension est
-  différée (aucun rebuild nécessaire grâce à l'architecture « hors socle ») ;
+- la vue Grafana (`simul-pix-diagnostic`, 08/11) **affiche** le diagnostic mais ne
+  le **prouve** pas — la CLI reste le produit livré et la source de vérité (aucun
+  rebuild nécessaire grâce à l'architecture « hors socle ») ;
 - le moteur joue **au-dessus du socle** : il hérite de ses défauts — si une sonde
   ment tout en restant « fraîche », le garde-fou fraîcheur ne le voit pas (l'inverse,
   une sonde périmée, EST détectée). La vérification indépendante tp-kafka/tp-db reste
@@ -233,9 +234,14 @@ validés-tardifs/rejets-TTL, phrase métier, vérification `tp-db.sh`) ; preuve
 rejouable `scripts/impact-metier-proof.sh` + `scripts/lib/impact_report.py`
 (`preuves/phase7-impact-metier-2026-11-05/` : 6/6, moteur == sonde PG == SQL).
 
+**Implémentée (08/11/2026)** — **vue Grafana permanente du diagnostic** : dashboard
+provisionné `simul-pix-diagnostic` alimenté par l'exporteur
+`scripts/diagnostic-export.sh` (métrique `simulpix_diagnostic`) ; étiquette
+« État sain — aucun incident actif » quand le verdict est `healthy` ; cycle incident
+C-postgres-indispo capturé (`preuves/phase6-grafana-diagnostic-2026-11-08/`).
+La CLI reste la source de vérité.
+
 **Restées en réserve** :
 
 1. **Détection adaptative** : remplacer des seuils fixes par une estimation liée au
-   débit courant — une règle explicite, justifiée et évaluée suffit déjà au minimum ;
-2. **Vue HTTP / panneau Grafana** : le même module peut être exposé par service-health
-   ou rendu en dashboard (extension différée ; aucun rebuild nécessaire).
+   débit courant — une règle explicite, justifiée et évaluée suffit déjà au minimum.

@@ -2,7 +2,7 @@
 
 > Fichier de suivi d'avancement détaillé (ce qui est fait, résultats, décisions).
 > Les tâches restantes sont pilotées dans [`TODO.md`](TODO.md).
-> Dernière mise à jour : 2026-11-05.
+> Dernière mise à jour : 2026-11-08.
 
 ---
 
@@ -20,6 +20,7 @@
 | Vérification croisée + non-confusion (phase 5) | ✅ fait (05/11) | `scripts/cross-check.sh` : 4 cas → **4/4 PASS**, chaque conclusion cross-checkée Kafka+PG, fermeture single-snapshot compteurs==PG — candidate #2 démontrée (`preuves/phase5-croisee-2026-11-05/`) |
 | Livrables finaux (guide, note de conception, conclusion) | ✅ fait (05/11) | `docs/operations/guide-diagnostic.md` + `docs/architecture/diagnostic-engine-design.md` (portée/limites = conclusion) ; protocoles + relevés déjà en place (§1.7/§1.8) |
 | Extension : impact métier (candidate #7, phase 7) | ✅ fait (05/11) | Bloc `business_impact` dans chaque verdict, vérifiable en base ; preuve 6/6 (moteur == sonde PG == SQL : 278==278==278) — `preuves/phase7-impact-metier-2026-11-05/` + `scripts/impact-metier-proof.sh` |
+| Extension : vue Grafana permanente du diagnostic | ✅ fait (08/11) | Dashboard `simul-pix-diagnostic` + exporteur `diagnostic-export.sh` (étiquette « État sain » quand verdict healthy) ; cycle incident C-postgres-indispo capturé (3 captures) — `preuves/phase6-grafana-diagnostic-2026-11-08/` |
 
 ---
 
@@ -309,6 +310,27 @@ limite de lecture), §10 (candidate #7 passe de « prolongement » à « implém
 
 ---
 
+### 1.11 Vue Grafana permanente du diagnostic (08/11/2026)
+
+**Choix** : la vue Grafana, laissée en réserve depuis la décision du 05/11 (« la CLI
+est le produit »), est livrée comme **complément d'affichage** — le socle du prof
+n'est pas touché (aucun service, moteur ni compose modifié) ; la CLI `diagnose.sh`
+reste la **source de vérité** (le dashboard affiche, il ne prouve pas).
+
+- **`infra/observability/grafana/dashboards/simul-pix-diagnostic.json`** — dashboard
+  provisionné « Simul-Pix - Diagnostic (SAÉ 5) » (uid `simulpix-diagnostic`) : frise
+  des verdicts (couleur par famille), cause nommée, probabilité/criticité, causes
+  examinées, fraîcheurs, motif indéterminé ;
+- **`scripts/diagnostic-export.sh` + `scripts/lib/diagnostic_export.py`** —
+  l'exporteur relève le moteur et écrit la métrique `simulpix_diagnostic` dans
+  InfluxDB (`--watch N`) ; étiquette « État sain — aucun incident actif » quand le
+  verdict est `healthy` (le détail moteur reste dans le CLI) ;
+- **Preuves** : cycle incident C-postgres-indispo (scénario `nominal`) capturé —
+  `preuves/phase6-grafana-diagnostic-2026-11-08/SYNTHESE.md` + 3 captures
+  (vue saine, incident persistence, CLI).
+
+---
+
 ## 2. Journal des décisions
 
 | Date | Décision |
@@ -334,6 +356,7 @@ limite de lecture), §10 (candidate #7 passe de « prolongement » à « implém
 | 05/11/2026 | Vue HTTP/panneau Grafana du moteur **définitivement différée** indiquée dans le livrable (décision phase 4 maintenue) ; la CLI est le produit |
 | 05/11/2026 | **Relecture croisée guide + note de conception** : imprécision corrigée sur le service down (conclusif pour un service à famille, `transversal`/`probe_blinded` sinon — vérifié dans le code), timeline A calée sur les horodatages, table des seuils clarifiée |
 | 05/11/2026 | **Phase 7 (impact métier, candidate #7) implémentée** : bloc `business_impact` factuel dans le verdict (moteur croise les compteurs SLA du socle, branche-cause intacte, garde-fous identiques) ; 32 tests OK ; preuve live moteur==sonde==SQL 278==278 (6/6) dans `preuves/phase7-impact-metier-…` ; adaptative et vue HTTP restent en réserve |
+| 08/11/2026 | **Vue Grafana permanente du diagnostic livrée** (sortie de réserve) : dashboard provisionné `simul-pix-diagnostic` + exporteur `diagnostic-export.sh` — la CLI reste le produit et la source de vérité ; étiquette « État sain — aucun incident actif » quand le verdict est `healthy` ; cycle incident C-postgres-indispo capturé (`preuves/phase6-grafana-diagnostic-2026-11-08/`, 3 captures) ; socle du prof non touché |
 
 ---
 

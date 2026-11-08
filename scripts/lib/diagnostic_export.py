@@ -53,6 +53,10 @@ DEFAULT_TOKEN = "simulpix-observability-token"
 FALLBACK_CAUSE = "aucune"
 FALLBACK_CAUSE_LABEL = "flux sain (aucune cause nommée)"
 FALLBACK_REASON = "aucun"
+# Étiquette affichée sur la vue Grafana quand le verdict est sain : on ne nomme
+# pas d'« incident » tant que l'état est sain (le détail moteur reste visible
+# via ./scripts/diagnose.sh et le champ cause=).
+HEALTHY_CAUSE_LABEL = "État sain — aucun incident actif"
 
 
 def _escape_tag(value: str) -> str:
@@ -94,9 +98,29 @@ def verdict_to_line(verdict: Dict[str, Any], timestamp_ns: Optional[int] = None)
     # Champs texte toujours présents (les requêtes Flux du dashboard restent stables).
     cause = verdict.get("cause") or FALLBACK_CAUSE
     cause_label = verdict.get("cause_label") or FALLBACK_CAUSE_LABEL
+    if family == "healthy":
+        # Quand l'état redevient sain, la vue affiche « état sain » au lieu du
+        # libellé moteur (« Amont arrêté… » ou cause résiduelle d'un incident passé).
+        cause_label = HEALTHY_CAUSE_LABEL
     probability = verdict.get("probability") or "—"
     criticality = verdict.get("criticality") or "—"
     reason = verdict.get("indeterminate_reason") or FALLBACK_REASON
+
+    # Liste des causes candidates du moteur (plausible_causes), triées par ordre
+    # d'examen : « [probable] label (probabilité/criticité) • [écartée] ... ».
+    candidates = verdict.get("plausible_causes") or []
+    if candidates:
+        parts = []
+        for candidate in sorted(candidates, key=lambda item: item.get("exam_order", 99)):
+            candidate_status = candidate.get("status") or "?"
+            candidate_label = candidate.get("label") or candidate.get("cause") or "?"
+            candidate_prob = candidate.get("probability") or "—"
+            candidate_crit = candidate.get("criticality") or "—"
+            parts.append("[%s] %s (%s/%s)" % (
+                candidate_status, candidate_label, candidate_prob, candidate_crit))
+        causes_list = " • ".join(parts)
+    else:
+        causes_list = "aucune cause candidate"
 
     fields = [
         "state_code=%di" % STATE_CODES[family],
@@ -105,6 +129,7 @@ def verdict_to_line(verdict: Dict[str, Any], timestamp_ns: Optional[int] = None)
         'probability="%s"' % _escape_str_field(probability),
         'criticality="%s"' % _escape_str_field(criticality),
         'indeterminate_reason="%s"' % _escape_str_field(reason),
+        'causes_list="%s"' % _escape_str_field(causes_list),
         "freshness_ok=%di" % (1 if freshness.get("ok") else 0),
     ]
     for name in ("payload_age_s", "replication_age_s"):

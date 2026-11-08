@@ -45,22 +45,41 @@ VERDICT_FILE="$REPO_DIR/runtime/.diagnose-verdict.json"
 trap 'rm -f "$SAMPLE_FILE" "$VERDICT_FILE"' EXIT
 
 run_once() {
-  if ! curl -fsS "$HEALTH_URL" -o "$SAMPLE_FILE" 2>/dev/null; then
+  if ! curl -fsS --max-time 10 "$HEALTH_URL" -o "$SAMPLE_FILE" 2>/dev/null; then
+    if [ "$WATCH" = 1 ]; then
+      # En mode watch, un hic passager (service-health qui redémarre, charge
+      # NFS) ne doit pas tuer la boucle : on réessaie au prochain tour.
+      echo "diagnostic-export: /health/details injoignable ($HEALTH_URL) — nouvel essai au prochain tour" >&2
+      return 0
+    fi
     echo "diagnostic-export: /health/details injoignable ($HEALTH_URL) — plateforme éteinte ?" >&2
     echo "  relancer : ./start.sh  et attendre que service-health réponde" >&2
     exit 2
   fi
   # Le verdict du moteur est produit en JSON (moteur inchangé), puis converti
   # en ligne InfluxDB par l'adaptateur de sortie.
-  python3 "$CLI" --sample "$SAMPLE_FILE" --cache "$CACHE" --json > "$VERDICT_FILE"
+  if ! python3 "$CLI" --sample "$SAMPLE_FILE" --cache "$CACHE" --json > "$VERDICT_FILE"; then
+    if [ "$WATCH" = 1 ]; then
+      echo "diagnostic-export: verdict illisible ce tour-ci — nouvel essai au prochain tour" >&2
+      return 0
+    fi
+    return 2
+  fi
   local flags=()
   [ "$PRINT" = 1 ] && flags+=(--print)
-  python3 "$EXPORT" --verdict "$VERDICT_FILE" "${flags[@]+"${flags[@]}"}"
+  if [ "$WATCH" = 1 ]; then
+    python3 "$EXPORT" --verdict "$VERDICT_FILE" "${flags[@]+"${flags[@]}"}" \
+      || echo "diagnostic-export: export InfluxDB échoué ce tour-ci — nouvel essai au prochain tour" >&2
+  else
+    python3 "$EXPORT" --verdict "$VERDICT_FILE" "${flags[@]+"${flags[@]}"}"
+  fi
 }
 
 if [ "$WATCH" = 1 ]; then
   # Ctrl+C pour sortir ; cadence conseillée 15 s (≥ 10 s : les règles à delta
   # du moteur ont besoin de 2 échantillons espacés pour conclure).
+  # Tolérant aux hics passagers (service-health injoignable, écriture InfluxDB
+  # échouée) : la boucle continue et réessaie au prochain tour.
   while true; do
     run_once
     echo "(prochain verdict dans ${INTERVAL}s — Ctrl+C pour arrêter)"
