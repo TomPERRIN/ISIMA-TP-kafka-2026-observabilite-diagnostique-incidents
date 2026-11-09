@@ -21,6 +21,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import blind_spots as bs  # noqa: E402
+import diagnostic_export as de  # noqa: E402 (protocole réutilisé par l'export)
 
 
 def _run(case_id: str) -> dict:
@@ -133,6 +134,99 @@ class BlindSpotContractTest(unittest.TestCase):
         summary = bs.render_summary(runs)
         self.assertIn("garantit", summary)
         self.assertIn("C4b", summary)
+
+
+class BlindSpotExportTest(unittest.TestCase):
+    """Mode --export/--print : 14 lignes InfluxDB, protocole de l'exporteur."""
+
+    def test_collect_lines_produces_one_valid_line_per_step(self):
+        runs = [bs.run_case(case, now=bs.time.time()) for case in bs.CASES]
+        items = bs.collect_lines(runs)
+        self.assertEqual(len(items), 14)
+        for item in items:
+            with self.subTest(case=item["case"], label=item["label"]):
+                self.assertTrue(item["line"].startswith(
+                    "simulpix_diagnostic,verdict_family="))
+                self.assertIn("state_code=", item["line"])
+                self.assertRegex(item["line"], r" \d+$")  # timestamp final (ns)
+
+    def test_export_covers_every_step_and_family_count(self):
+        runs = [bs.run_case(case, now=bs.time.time()) for case in bs.CASES]
+        counts: dict = {}
+        for run in runs:
+            for step in run["steps"]:
+                family = step["verdict"]["verdict"]
+                counts[family] = counts.get(family, 0) + 1
+        self.assertEqual(counts, {"healthy": 9, "kafka_replication": 2,
+                                  "persistence": 1, "indeterminate": 2})
+
+    def test_print_mode_outputs_the_14_lines_without_sending(self):
+        import io
+        from contextlib import redirect_stdout
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            code = bs.main(["--print"])
+        self.assertEqual(code, 0)
+        lines = [line for line in buffer.getvalue().splitlines() if line.strip()]
+        self.assertEqual(len(lines), 14)
+        self.assertTrue(lines[0].startswith("simulpix_diagnostic,verdict_family="))
+
+    def _quiet(self, items, hold_s, url, org, bucket, token):
+        """export_to_grafana sans polluer la sortie des tests."""
+        import io
+        from contextlib import redirect_stdout
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            return bs.export_to_grafana(items, hold_s, url, org, bucket, token)
+
+    def test_export_pushes_every_state(self):
+        items = bs.collect_lines(
+            [bs.run_case(case, now=bs.time.time()) for case in bs.CASES])
+        calls: list = []
+        original = de.send_line
+        de.send_line = (lambda line, url, org, bucket, token, timeout=5.0:
+                        calls.append(line) or True)
+        try:
+            pushed = self._quiet(items, 0, "http://localhost:8086",
+                                 "simulpix", "simulpix_observability", "t")
+        finally:
+            de.send_line = original
+        self.assertEqual(pushed, 14)
+        self.assertEqual(len(calls), 14)
+
+    def test_export_aborts_on_first_write_failure(self):
+        items = bs.collect_lines(
+            [bs.run_case(case, now=bs.time.time()) for case in bs.CASES])
+        calls: list = []
+        original = de.send_line
+
+        def failing(line, url, org, bucket, token, timeout=5.0):
+            calls.append(line)
+            return len(calls) < 3  # échec à la 3e écriture
+
+        de.send_line = failing
+        try:
+            pushed = self._quiet(items, 0, "http://localhost:8086",
+                                 "simulpix", "simulpix_observability", "t")
+        finally:
+            de.send_line = original
+        self.assertEqual(pushed, 2)
+        self.assertEqual(len(calls), 3)
+
+    def test_export_sleeps_between_states_not_after_the_last(self):
+        items = bs.collect_lines(
+            [bs.run_case(case, now=bs.time.time()) for case in bs.CASES])
+        sleeps: list = []
+        original_send, original_sleep = de.send_line, bs.time.sleep
+        de.send_line = lambda line, url, org, bucket, token, timeout=5.0: True
+        bs.time.sleep = lambda s: sleeps.append(s)
+        try:
+            pushed = self._quiet(items, 5.0, "http://localhost:8086",
+                                 "simulpix", "simulpix_observability", "t")
+        finally:
+            de.send_line, bs.time.sleep = original_send, original_sleep
+        self.assertEqual(pushed, 14)
+        self.assertEqual(len(sleeps), 13)  # pas après le dernier état
 
 
 if __name__ == "__main__":

@@ -146,6 +146,11 @@ Le harnais ne modifie pas le moteur et fonctionne **sans Docker** (pur Python) �
 rejouable tel quel en soutenance. Protégé par `scripts/lib/test_blind_spots.py` :
 si un angle mort se ferme (le moteur évolue), les tests lèvent l'alerte.
 
+Variante « vue » : `./scripts/demo-angles-morts.sh --export` pousse les 14 états
+simulés sur la frise Grafana (métrique `simulpix_diagnostic`, protocole de
+l'exporteur réutilisé, dashboard NON modifié — hold 5 s entre deux états pour
+que chaque segment reste lisible) ; `--print` affiche les lignes sans envoyer.
+
 **Garantit / ne garantit pas :** la garantie mesurée (justesse 4/4, délai max 25 s,
 0 faux positif) porte sur les **5 cas prouvés du §1** (A2, A4, B2, C1, C2). Le détail
 complet est tenu à jour dans le guide (§10) et la note de conception (§9) — ne pas le

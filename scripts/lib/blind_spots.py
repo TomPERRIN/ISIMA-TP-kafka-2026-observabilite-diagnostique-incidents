@@ -20,7 +20,16 @@ Usage :
     python3 blind_spots.py                 tous les cas + récapitulatif
     python3 blind_spots.py --case B4a      un seul cas (id exact ou préfixe)
     python3 blind_spots.py --json          verdicts bruts (machine)
+    python3 blind_spots.py --export        pousse les états SIMULÉS sur la frise
+                                           Grafana (métrique simulpix_diagnostic,
+                                           protocole de l'exporteur réutilisé —
+                                           le dashboard n'est PAS modifié)
+    python3 blind_spots.py --print         affiche les lignes InfluxDB sans envoyer
     scripts/demo-angles-morts.sh           enrobage CLI recommandé
+
+Variables d'export : SIMULPIX_INFLUXDB_URL/_ORG/_BUCKET/_TOKEN (idem exporteur),
+                     SIMULPIX_BLIND_HOLD_S (secondes entre deux états, défaut 5 :
+                     chaque segment doit rester lisible sur la frise).
 """
 
 from __future__ import annotations
@@ -35,6 +44,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import diagnostic_export  # noqa: E402
 from diagnose_engine import build_verdict  # noqa: E402
 
 FAMILY_LABELS = {
@@ -49,6 +59,14 @@ FAMILY_LABELS = {
 
 def _iso(epoch: float) -> str:
     return datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat()
+
+
+def _env_float(name: str, default: float) -> float:
+    """Flottant lu dans l'environnement, sinon la valeur par défaut."""
+    try:
+        return float(os.environ[name])
+    except (KeyError, ValueError):
+        return default
 
 
 def _brokers(urp: float = 0.0, offline: float = 0.0, controller: float = 1.0,
@@ -423,11 +441,61 @@ def _match(cases: List[Dict[str, Any]], wanted: str) -> List[Dict[str, Any]]:
     return matches
 
 
+def collect_lines(runs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Un item par étape exécutée (14 au total, pas seulement les verdicts finaux).
+
+    L'ordre est celui des cas puis des étapes : la frise montre les transitions
+    dans l'ordre du catalogue. La ligne InfluxDB est produite par le protocole
+    de l'exporteur (``diagnostic_export.verdict_to_line``, métrique
+    ``simulpix_diagnostic``) ; à l'export, elle est reconstruite au moment du
+    push pour que le timestamp espace les segments sur la frise.
+    """
+    items: List[Dict[str, Any]] = []
+    for run in runs:
+        for step in run["steps"]:
+            items.append({"case": run["id"], "label": step["label"],
+                          "verdict": step["verdict"],
+                          "line": diagnostic_export.verdict_to_line(step["verdict"])})
+    return items
+
+
+def export_to_grafana(items: List[Dict[str, Any]], hold_s: float, url: str,
+                      org: str, bucket: str, token: str) -> int:
+    """Pousse chaque état sur la frise Grafana (métrique simulpix_diagnostic).
+
+    Timestamp = moment du push, hold_s entre deux états (pas après le
+    dernier) : chaque segment reste lisible sur la frise. Abandon à la
+    première écriture en échec ; retourne le nombre d'états poussés.
+    """
+    pushed = 0
+    for index, item in enumerate(items):
+        if index and hold_s > 0:
+            time.sleep(hold_s)
+        line = diagnostic_export.verdict_to_line(item["verdict"])
+        if line is None or not diagnostic_export.send_line(line, url, org, bucket, token):
+            print("arrêt à l'état %d/%d (%s %s) : écriture InfluxDB en échec"
+                  % (index + 1, len(items), item["case"], item["label"]),
+                  file=sys.stderr)
+            break
+        pushed += 1
+        print("%2d/%d  %-4s %-26s %s" % (
+            pushed, len(items), item["case"], item["label"],
+            FAMILY_LABELS.get(item["verdict"].get("verdict"), "?")))
+    return pushed
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description="Démonstration des angles morts du diagnostic Simul-Pix")
     parser.add_argument("--case", help="un cas (B4a, B4, B3, C3, C4, A0, T0)")
     parser.add_argument("--json", action="store_true", help="sortie JSON brute")
+    parser.add_argument("--export", action="store_true",
+                        help="pousse les états SIMULÉS sur la frise Grafana")
+    parser.add_argument("--print", dest="print_lines", action="store_true",
+                        help="affiche les lignes InfluxDB sans envoyer")
+    parser.add_argument("--hold", type=float,
+                        default=_env_float("SIMULPIX_BLIND_HOLD_S", 5.0),
+                        help="secondes entre deux états poussés (défaut 5)")
     args = parser.parse_args(argv)
 
     cases = CASES if not args.case else _match(CASES, args.case)
@@ -440,14 +508,35 @@ def main(argv: Optional[List[str]] = None) -> int:
                           "cases": runs,
                           "proven_in_campaign": PROVEN},
                          ensure_ascii=False, indent=1))
-    else:
-        for index, run in enumerate(runs):
-            if index:
-                print()
-            print(render_case(run))
-        if not args.case or len(runs) > 1:
+        return 0
+
+    if args.print_lines:
+        for item in collect_lines(runs):
+            print(item["line"])
+        return 0
+
+    if args.export:
+        items = collect_lines(runs)
+        print("états SIMULÉS (angles morts, sondes fraîches) : %d états, "
+              "hold %.0f s — frise : http://localhost:3000/d/simulpix-diagnostic"
+              % (len(items), args.hold))
+        pushed = export_to_grafana(
+            items, args.hold,
+            os.environ.get("SIMULPIX_INFLUXDB_URL", diagnostic_export.DEFAULT_URL),
+            os.environ.get("SIMULPIX_INFLUXDB_ORG", diagnostic_export.DEFAULT_ORG),
+            os.environ.get("SIMULPIX_INFLUXDB_BUCKET", diagnostic_export.DEFAULT_BUCKET),
+            os.environ.get("SIMULPIX_INFLUXDB_TOKEN", diagnostic_export.DEFAULT_TOKEN))
+        print("%d/%d états poussés sur %s" % (
+            pushed, len(items), diagnostic_export.MEASUREMENT))
+        return 0 if pushed == len(items) else 1
+
+    for index, run in enumerate(runs):
+        if index:
             print()
-            print(render_summary(runs))
+        print(render_case(run))
+    if not args.case or len(runs) > 1:
+        print()
+        print(render_summary(runs))
     return 0
 
 
