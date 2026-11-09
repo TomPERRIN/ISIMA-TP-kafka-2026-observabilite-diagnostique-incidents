@@ -121,7 +121,9 @@ def verdict_to_line(verdict: Dict[str, Any], timestamp_ns: Optional[int] = None)
                 candidate_status, candidate_label, candidate_prob, candidate_crit))
         causes_list = " • ".join(parts)
     else:
-        causes_list = "aucune cause candidate"
+        # Pas de cause candidate : « — » (non vide — le last() de Flux saute les
+        # valeurs vides) ; la vue le masque pour n'afficher rien à l'état sain.
+        causes_list = "—"
 
     fields = [
         "state_code=%di" % STATE_CODES[family],
