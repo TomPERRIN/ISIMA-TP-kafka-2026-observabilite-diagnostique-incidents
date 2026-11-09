@@ -114,7 +114,13 @@ seul ; jamais sur un offset Kafka seul (toujours lire PostgreSQL).
 
 ### 5.1 Retard de consommateur (situation A) — preuves `preuves/phase5-…/A-draine/`
 
-Injecté par : `./scripts/run-scenario.sh consumer_lag 600 20` (décision 400 ms à 20/s).
+Injecté par : `./scripts/run-scenario.sh consumer_lag 600 20` (décision 350 ms à 20/s).
+
+> Le lancement d'un scénario **recrée service-health** (`run-scenario.sh` l'inclut dans
+> sa recréation de conteneurs) : `/health/details` devient injoignable quelques secondes
+> et un `--watch` déjà lancé **s'arrête** (le script quitte au lieu de réessayer).
+> Lancer le `--watch` **après** la fin de la recréation des conteneurs, ou relancer
+> `--watch` si le message « injoignable » apparaît au moment de l'injection.
 
 Ce qui se passe (relevé réel, cadence 11 s) :
 
@@ -270,7 +276,7 @@ sonde PG == SQL direct : 278==278==278 ; delta contrôlé 0 == 0). Protocoles co
 
 | Symptôme | Cause probable | Action |
 |---|---|---|
-| `diagnose: /health/details injoignable` | plateforme éteinte | `./start.sh`, attendre service-health |
+| `diagnose: /health/details injoignable` | plateforme éteinte, **ou** conteneurs recréés par un lancement de scénario (service-health recréé quelques secondes) | si éteinte : `./start.sh`, attendre service-health ; si pendant un lancement de scénario : attendre quelques secondes et relancer `--watch` |
 | `indeterminate/needs_second_sample` persistant | cadence < 10 s | `--watch 15` au lieu d'enchaîner des ponctuels |
 | `indeterminate/probes_stale` | collecteur/service-health accroché | `./stop.sh && ./start.sh`, puis `--reset` |
 | lag `=1` isolé en nominal | rattrapage éclair | ne pas conclure : 0-1 en nominal est normal, le moteur l'ignore |

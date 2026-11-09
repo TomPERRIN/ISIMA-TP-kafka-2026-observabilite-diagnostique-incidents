@@ -1,0 +1,4 @@
+{"t_epoch":1794150359,"event":"case_start","detail":"env SIMULPIX_REPLICATION_OUTAGE_SECONDS_OVERRIDE=20 SIMULPIX_REPLICATION_PAUSED_BROKER_OVERRIDE=kafka-3 ./scripts/run-scenario.sh replication_lag 600 20"}
+{"t_epoch":1794150359,"event":"scenario_launch","detail":"run-scenario.sh env SIMULPIX_REPLICATION_OUTAGE_SECONDS_OVERRIDE=20 SIMULPIX_REPLICATION_PAUSED_BROKER_OVERRIDE=kafka-3 ./scripts/run-scenario.sh replication_lag 600 20"}
+{"t_epoch":1794150484,"event":"scenario_ready","detail":"t_launch=1794150359"}
+{"t_epoch":1794150615,"event":"case_end","detail":"window=115s"}
