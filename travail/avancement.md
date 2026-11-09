@@ -22,6 +22,7 @@
 | Extension : impact métier (candidate #7, phase 7) | ✅ fait (05/11) | Bloc `business_impact` dans chaque verdict, vérifiable en base ; preuve 6/6 (moteur == sonde PG == SQL : 278==278==278) — `preuves/phase7-impact-metier-2026-11-05/` + `scripts/impact-metier-proof.sh` |
 | Extension : vue Grafana permanente du diagnostic | ✅ fait (08/11) | Dashboard `simulpix-diagnostic` + exporteur `diagnostic-export.sh` (étiquette « État sain » quand verdict healthy) ; cycle incident C-postgres-indispo capturé (3 captures) — `preuves/phase6-grafana-diagnostic-2026-11-08/` |
 | Extension v2 : deux symptômes distincts (file qui grossit vs traitement lent) | ✅ fait (09/11) | Famille `slow_processing` (verdict D) + déclencheur latence > SLA sur 2 échantillons ; cas D `D-traitement-lent` dans la campagne ; matrice v2 + 37 tests ; **démo Grafana en une commande** (`demo-diagnostic.sh`) + couverture automatique du rapport — couverture live à rejouer quand la plateforme tourne |
+| Angles morts démontrés mécaniquement | ✅ fait (09/11) | `demo-angles-morts.sh` : 9 cas sans cause nommée (B3/B4/C3/C4 + registre §5) simulés sans Docker, verdict du vrai moteur affiché cas par cas + récapitulatif « garantit / ne garantit pas » ; 16 tests ; sonde qui ment en restant fraîche = non détectée (C4b, DÉMONTRÉ) |
 
 ---
 
@@ -403,6 +404,35 @@ pipeline **6/6**.
 
 ---
 
+### 1.14 Angles morts démontrés mécaniquement (09/11/2026)
+
+**Choix** : les angles morts du registre des risques (§5) ne devaient pas rester
+déclaratifs — un cas simulé par payloads synthétiques (sondes fraîches) passé au **vrai
+moteur** les DÉMONTRE : le verdict affiché est calculé à l'exécution, jamais codé en dur.
+
+- **`scripts/lib/blind_spots.py`** — harnais d'exposition, pur Python : 9 cas
+  (B4a/B4b contrôleur perdu ± URP, B3 rééquilibrage, C3a/C3b saturation légère/forte,
+  C4a/C4b écriture échouée ± sonde mensongère, A0 offset non initialisé, T0 service
+  transversal) ; chaque cas affiche « signal vu → verdict du moteur → limite assumée »,
+  avec un récapitulatif final « garantit / ne garantit pas » (les 5 cas prouvés en
+  campagne face aux angles morts) ;
+- **`scripts/demo-angles-morts.sh`** — enrobage CLI (`--case`, `--json`), **sans
+  Docker** : rejouable tel quel en soutenance, même sans la stack ;
+- la limite majeure est maintenant DÉMONTRÉE (pas déclarée) : **une sonde qui ment en
+  restant fraîche produit un `healthy` erroné** (C4b) — le garde-fou fraîcheur
+  (critère #6) ne voit que le PÉRIMÉ ; la vérification indépendante tp-kafka/tp-db
+  reste le dernier rempart (imprimée dans chaque verdict) ;
+- **`scripts/lib/test_blind_spots.py`** — 16 tests : chaque cas doit produire le
+  verdict attendu (si un angle mort se FERME, le test alerte — il faut relire la
+  limite dans les docs), toutes les sondes simulées sont fraîches, span 12 s sur les
+  cas à 2 lectures, mapping des préfixes (`B4` → B4a+B4b) ;
+- **docs** : `cas-incidents.md` §1/§5 pointent vers le harnais (tableau des 9 cas).
+
+Le moteur n'est pas modifié ; les preuves archivées ne sont pas touchées. Les 4 suites
+passent : moteur **37/37**, rapport **10/10**, pipeline **6/6**, angles morts **16/16**.
+
+---
+
 ## 2. Journal des décisions
 
 | Date | Décision |
@@ -431,6 +461,7 @@ pipeline **6/6**.
 | 08/11/2026 | **Vue Grafana permanente du diagnostic livrée** (sortie de réserve) : dashboard provisionné `simul-pix-diagnostic` + exporteur `diagnostic-export.sh` — la CLI reste le produit et la source de vérité ; étiquette « État sain — aucun incident actif » quand le verdict est `healthy` ; cycle incident C-postgres-indispo capturé (`preuves/phase6-grafana-diagnostic-2026-11-08/`, 3 captures) ; socle du prof non touché |
 | 09/11/2026 | **Deux symptômes distincts (v2)** : nouvelle famille **`slow_processing`** (verdict D, paiement traité trop lentement) distincte de `consumer_backlog` (file qui grossit) — l'analyse causale : **un traitement long engendre une attente grossissante, mais les causes d'un traitement lent se tranchent file vide** ; déclencheur latence > SLA × 80 % sur 2 échantillons (sans attendre les breaches) ; cas D `D-traitement-lent` (scénario via UI + `kafka_latency`) ; 37 tests ; matrice v2 ; **couverture live du cas D à rejouer quand la plateforme tourne** |
 | 09/11/2026 | **Démo en une commande + couverture automatique** : `demo-diagnostic.sh` (exporteur Grafana + campagne, un seul terminal, cache exporteur dédié), option `--pause` de la campagne, couverture « problèmes étudiés » dans le rapport (famille non vue = ❌, même en run partiel `--cases`) — 10 tests du mapping (`test_campaign_report.py`) |
+| 09/11/2026 | **Angles morts démontrés mécaniquement** : `demo-angles-morts.sh` + `blind_spots.py` — 9 cas du catalogue (B3/B4/C3/C4 + registre §5) simulés par payloads synthétiques frais passés au vrai moteur, verdict calculé à l'exécution (pas codé en dur) ; limite majeure DÉMONTRÉE : une sonde qui ment en restant fraîche produit un `healthy` erroné (C4b) — 16 tests (`test_blind_spots.py`) ; sans Docker, rejouable en soutenance |
 
 ---
 
