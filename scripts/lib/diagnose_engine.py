@@ -94,7 +94,10 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "idle_rate_threshold": _env_float("SIMULPIX_DIAG_IDLE_RATE", 0.01),
 }
 
-VERDICTS = ("healthy", "consumer_backlog", "kafka_replication", "persistence", "indeterminate")
+#: slow_processing : paiement traité trop lentement (symptôme 2), distinct de
+#: consumer_backlog (symptôme 1 : file d'attente qui grossit) — voir _rule_sla.
+VERDICTS = ("healthy", "consumer_backlog", "slow_processing",
+            "kafka_replication", "persistence", "indeterminate")
 
 READER_GROUPS = ("pix-validator", "pix-decision-engine", "pix-outcome-publisher")
 PERSISTER_GROUPS = ("persister-valid", "persister-rejected")
@@ -193,8 +196,8 @@ CAUSE_TABLE: Dict[str, Dict[str, Any]] = {
         "independent_check": "./scripts/tp-kafka.sh",
     },
     "sla_config": {
-        "family": "consumer_backlog",
-        "label": "Délai accordé trop court pour la charge (configuration du scénario, pas un incident de plateforme)",
+        "family": "slow_processing",
+        "label": "Traitement long : délai SLA trop court pour la charge (configuration du scénario, pas un incident de plateforme)",
         "probability": "Faible",
         "criticality": "Moyenne",
         "exam_order": 1,
@@ -1053,37 +1056,120 @@ def _rule_reader(s: Dict[str, Any], s_prev: Optional[Dict[str, Any]], span: Opti
 
 def _rule_sla(s: Dict[str, Any], s_prev: Dict[str, Any], span: Optional[float], now: float,
               freshness: Dict[str, Any], config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Ligne 4 : validated_sla_breaches en hausse -> retard amont (1re) vs délai trop court (2e)."""
-    breaches_now = _breaches_total(s)
-    breaches_prev = _breaches_total(s_prev)
-    if breaches_now is None or breaches_prev is None or breaches_now <= breaches_prev:
-        return None
-    threshold = float(config["lag_total_threshold"])
-    delta = breaches_now - breaches_prev
+    """Ligne 4 : paiement traité trop lentement (symptôme 2, distinct de la file qui grossit).
+
+    Deux déclencheurs (au moins un, avec 2 échantillons espacés d'au moins
+    ``min_sample_span_seconds``) :
+      1. validated+rejected SLA breaches EN HAUSSE entre les 2 lectures ;
+      2. latence moyenne > SLA × marge sur LES 2 lectures (traitement long installé,
+         sans attendre de nouveaux dépassements en base).
+
+    Causes tranchées par l'état de la file (matrice v2 : un traitement long engendre
+    une attente grossissante, mais une file qui grossit désigne l'amont — les causes
+    possibles d'un traitement lent sont tranchées quand la file est vide) :
+      - file qui grossit            -> upstream_backlog_sla (consumer_backlog) ;
+      - file vide + écart qui grossit -> persister_slow (persistence) ;
+      - file vide + écart stable + latence haute -> sla_config (slow_processing) ;
+      - file vide + aucun signal    -> indéterminé (ambiguous_sla).
+    """
+    margin = float(config["sla_latency_margin"])
     latency = s.get("avg_validation_latency_ms")
     sla = s.get("sla_seconds")
+    latency_high = (latency is not None and sla is not None
+                    and latency > sla * 1000 * margin)
+    breaches_now = _breaches_total(s)
+    breaches_prev = _breaches_total(s_prev) if s_prev is not None else None
+    breaches_rising = (breaches_now is not None and breaches_prev is not None
+                       and breaches_now > breaches_prev)
+    if not breaches_rising and not latency_high:
+        return None
+    if s_prev is None:
+        # UNE seule lecture : on ne conclut jamais (contrat du moteur, >= 2 échantillons)
+        if not latency_high:
+            return None
+        return _undetermined(
+            "needs_second_sample",
+            (f"Traitement lent suspecté (latence {int(latency)} ms > SLA {int(sla)} s) : "
+             "à UNE lecture on ne conclut pas — relire (2 échantillons espacés d'au moins "
+             f"{int(config['min_sample_span_seconds'])} s) pour confirmer le traitement "
+             "long et trancher la cause."),
+            _evidence_pg(s) + _evidence_flow(s), now, span, freshness,
+            plausible=[
+                _cause("upstream_backlog_sla", "hypothesis",
+                       note="si la file grossit entre les 2 lectures : amont en retard"),
+                _cause("persister_slow", "hypothesis",
+                       note="si l'écart de persistance s'accroît : persistance lente"),
+                _cause("sla_config", "hypothesis",
+                       note="si la file reste vide : délai SLA trop court (configuration)"),
+            ],
+            nexts=[RERUN_CMD, INDEPENDENT_CHECK_REMINDER])
+    prev_latency = s_prev.get("avg_validation_latency_ms")
+    prev_sla = s_prev.get("sla_seconds")
+    latency_prev_high = (prev_latency is not None and prev_sla is not None
+                         and prev_latency > prev_sla * 1000 * margin)
+    if not breaches_rising and not latency_prev_high:
+        # latence haute à cette lecture seulement : début d'incident, à confirmer
+        return _undetermined(
+            "needs_second_sample",
+            (f"Traitement lent suspecté (latence {int(latency)} ms > SLA {int(sla)} s à "
+             "cette lecture seulement) : le déclencheur exige la latence haute sur les "
+             "2 lectures — relire pour confirmer."),
+            _evidence_pg(s) + _evidence_flow(s), now, span, freshness,
+            plausible=[
+                _cause("sla_config", "hypothesis",
+                       note="si la latence se confirme et la file reste vide"),
+            ],
+            nexts=[RERUN_CMD, INDEPENDENT_CHECK_REMINDER])
+
+    threshold = float(config["lag_total_threshold"])
+    gap_step = float(config["gap_step"])
+    delta = breaches_now - breaches_prev
     pending = s.get("pending_result_count") or 0.0
     lag_r = _max_lag(s, READER_GROUPS)
     lag_p = _max_lag(s, PERSISTER_GROUPS)
     queue_long = (pending >= threshold) or lag_r >= threshold or lag_p >= threshold
-    evidence = [
-        _ev("platform", "sla_breaches",
-            f"validated+rejected SLA breaches {breaches_prev:g} -> {breaches_now:g} (delta +{delta:g})"),
-        _ev("postgres", "sla", "breaches comptés en base (details.postgres)") ,
-        _ev("platform", "pending_result_count", f"file (pending_result_count) = {int(pending)}"),
-    ]
+    gap_now = _gaps_total(s)
+    gap_prev = _gaps_total(s_prev)
+    gap_delta = (gap_now - gap_prev) if (gap_now is not None and gap_prev is not None) else None
+    persister_growing = gap_delta is not None and gap_delta >= gap_step
+
+    if breaches_rising:
+        trigger = f"Dépassements SLA en hausse (+{delta:g})"
+    else:
+        trigger = (f"Latence moyenne {int(latency)} ms > SLA {int(sla)} s (marge "
+                   f"{int(margin*100)} %) sur les 2 lectures")
+    evidence = []
+    if breaches_rising:
+        evidence += [
+            _ev("platform", "sla_breaches",
+                f"validated+rejected SLA breaches {breaches_prev:g} -> {breaches_now:g} "
+                f"(delta +{delta:g})"),
+            _ev("postgres", "sla", "breaches comptés en base (details.postgres)"),
+        ]
+    elif breaches_now is not None:
+        evidence.append(_ev("platform", "sla_breaches",
+                            f"validated+rejected SLA breaches stables "
+                            f"({int(breaches_now)}) entre les 2 lectures"))
+    evidence.append(_ev("platform", "pending_result_count",
+                        f"file (pending_result_count) = {int(pending)}"))
     if latency is not None and sla is not None:
         evidence.append(_ev("postgres", "latency vs SLA",
                             f"avg_validation_latency_ms={int(latency)} ms vs "
                             f"decision_sla_seconds={int(sla)} s (marge "
-                            f"{int(config['sla_latency_margin']*100)}%)"))
+                            f"{int(margin*100)} %)"))
+    if gap_delta is not None:
+        evidence.append(_ev("postgres", "gaps",
+                            f"écart de persistance {gap_prev:g} -> {gap_now:g} "
+                            f"(delta {gap_delta:+g})"))
 
     if queue_long:
+        # lien causal : le traitement long de l'amont ENGENDRE l'attente grossissante
         return _concluded(
             "consumer_backlog", "upstream_backlog_sla",
-            summary=(f"Dépassements SLA en hausse (+{delta:g}) avec une file"
-                     f" (« pending={int(pending)} », lag lecteur "
-                     f"{int(lag_r)}) : retard amont — les paiements attendent et dépassent le TTL."),
+            summary=(f"{trigger} avec une file qui grossit (« pending={int(pending)} », "
+                     f"lag lecteur {int(lag_r)}) : retard amont — un traitement long "
+                     "engendre une attente grossissante, les paiements s'accumulent et "
+                     "dépassent le TTL."),
             evidence=evidence,
             plausible=[
                 _cause("upstream_backlog_sla", "probable"),
@@ -1093,28 +1179,49 @@ def _rule_sla(s: Dict[str, Any], s_prev: Dict[str, Any], span: Optional[float], 
                    "Relire : " + RERUN_CMD],
             now=now, span=span, freshness=freshness)
 
-    if latency is not None and sla is not None and latency > sla * 1000 * float(config["sla_latency_margin"]):
+    if persister_growing:
+        # file vide mais la persistance ne suit plus : c'est elle qui rend le traitement long
         return _concluded(
-            "consumer_backlog", "sla_config",
-            summary=(f"Dépassements SLA en hausse (+{delta:g}) AVEC la file vide et une latence "
-                     f"{int(latency)} ms > SLA {int(sla)} s : délai trop court pour la charge "
-                     "(problème de configuration du scénario, pas un incident de plateforme)."),
+            "persistence", "persister_slow",
+            summary=(f"{trigger} avec la file vide mais un écart de persistance qui "
+                     f"S'ACCROÎT ({gap_prev:g} -> {gap_now:g}) : le traitement est long "
+                     "parce que la persistance ne suit plus (les paiements mettent du "
+                     "temps à être écrits)."),
             evidence=evidence,
             plausible=[
-                _cause("upstream_backlog_sla", "hypothesis", note="file vide : peu probable"),
+                _cause("persister_slow", "probable"),
+                _cause("sla_config", "hypothesis",
+                       note="écart qui grossit : plutôt la persistance"),
+            ],
+            nexts=[CAUSE_TABLE["persister_slow"]["independent_check"],
+                   "Relire : " + RERUN_CMD],
+            now=now, span=span, freshness=freshness)
+
+    if latency_high:
+        # file vide, écart de persistance stable : le traitement lui-même est long
+        return _concluded(
+            "slow_processing", "sla_config",
+            summary=(f"{trigger} avec la file vide et un écart de persistance stable : le "
+                     f"traitement lui-même est long ({int(latency)} ms > SLA {int(sla)} s) "
+                     "— délai trop court pour la charge (configuration du scénario, pas un "
+                     "incident de plateforme)."),
+            evidence=evidence,
+            plausible=[
                 _cause("sla_config", "probable"),
+                _cause("persister_slow", "hypothesis",
+                       note="écart stable : la persistance suit, peu probable"),
             ],
             nexts=["Comparer latence moyenne vs SLA : "
-                   f"{int(latency)} ms / {int(sla)} s (marge "
-                   f"{int(config['sla_latency_margin']*100)}%)",
+                   f"{int(latency)} ms / {int(sla)} s (marge {int(margin*100)} %)",
                    "./scripts/tp-db.sh", RERUN_CMD],
             now=now, span=span, freshness=freshness)
 
     return _undetermined(
         "ambiguous_sla",
-        ("Dépassements SLA en hausse avec file vide et latence dans le seuil : on ne peut "
-         "pas trancher retard amont/délai trop court — comparer la latence moyenne au SLA "
-         "et vérifier les motifs en base."),
+        ("Traitement lent (dépassements SLA en hausse) avec file vide et latence dans le "
+         "seuil : on ne peut pas trancher entre les causes possibles d'un traitement lent "
+         "(persistance lente / délai SLA trop court / amont en retard) — comparer la "
+         "latence moyenne au SLA et vérifier les motifs en base."),
         evidence, now, span, freshness,
         plausible=[
             _cause("upstream_backlog_sla", "hypothesis"),
@@ -1199,10 +1306,10 @@ def route(payload: Dict[str, Any], s: Dict[str, Any], s_prev: Optional[Dict[str,
     verdict = _rule_reader(s, s_prev, span, now, freshness, config)
     if verdict:
         return verdict
-    if s_prev is not None:
-        verdict = _rule_sla(s, s_prev, span, now, freshness, config)
-        if verdict:
-            return verdict
+    # ligne 4 : paiement traité trop lentement (aussi à UNE lecture -> indéterminé)
+    verdict = _rule_sla(s, s_prev, span, now, freshness, config)
+    if verdict:
+        return verdict
     return _rule_calm(s, s_prev, span, now, freshness, config, [])
 
 

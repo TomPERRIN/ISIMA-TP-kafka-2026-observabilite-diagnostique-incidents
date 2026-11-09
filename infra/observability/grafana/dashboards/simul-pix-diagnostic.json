@@ -92,6 +92,11 @@
                   "text": "persistance défaillante (C)",
                   "color": "red",
                   "index": 4
+                },
+                "4": {
+                  "text": "traitement lent (D)",
+                  "color": "blue",
+                  "index": 5
                 }
               }
             },
@@ -102,7 +107,7 @@
                 "result": {
                   "text": "exporteur arrêté",
                   "color": "text",
-                  "index": 5
+                  "index": 6
                 }
               }
             }
@@ -576,7 +581,7 @@
       },
       "id": 8,
       "options": {
-        "content": "## Aide de lecture\n\n1. **La frise** montre la succession des verdicts : sain → indéterminé → incident (A/B/C) → sain.\n2. **Couleurs de la frise** : **vert** = sain · **violet** = indéterminé (pas de conclusion) · **orange** = retard consommateur (A) · **jaune** = réplication dégradée (B) · **rouge** = persistance défaillante (C) · **gris** = exporteur arrêté.\n3. **Incident probable** donne la dernière cause nommée du moteur, avec sa probabilité et sa criticité (classement de la matrice).\n4. **Fraîcheur** : âge des mesures au moment du verdict — au-delà de la limite (75 s), le moteur ne conclut jamais (`probes_stale`).\n5. **Motif indéterminé** : quand la donnée ne permet pas de trancher, le moteur répond explicitement (`needs_second_sample`, `probes_stale`, …) — c'est une réponse, pas un silence.\n\n⚠️ Rappel : le dashboard **affiche** le diagnostic, il ne le **prouve** pas — toute conclusion se vérifie en direct avec `tp-kafka.sh` (Kafka) et `tp-db.sh` (PostgreSQL), et la CLI `diagnose.sh` reste la source de vérité.",
+        "content": "## Aide de lecture\n\n1. **La frise** montre la succession des verdicts : sain → indéterminé → incident (A/B/C/D) → sain.\n2. **Couleurs de la frise** : **vert** = sain · **violet** = indéterminé (pas de conclusion) · **orange** = retard consommateur (A) · **jaune** = réplication dégradée (B) · **rouge** = persistance défaillante (C) · **bleu** = traitement trop lent (D) · **gris** = exporteur arrêté.\n3. **Incident probable** donne la dernière cause nommée du moteur, avec sa probabilité et sa criticité (classement de la matrice).\n4. **Fraîcheur** : âge des mesures au moment du verdict — au-delà de la limite (75 s), le moteur ne conclut jamais (`probes_stale`).\n5. **Motif indéterminé** : quand la donnée ne permet pas de trancher, le moteur répond explicitement (`needs_second_sample`, `probes_stale`, …) — c'est une réponse, pas un silence.\n6. **Deux symptômes distincts** : la file qui grossit (A) n'est pas le traitement lent (D) — un traitement long engendre une attente grossissante, mais les causes d'un traitement lent sont tranchées quand la file est vide (persistance lente vs délai SLA trop court).\n\n⚠️ Rappel : le dashboard **affiche** le diagnostic, il ne le **prouve** pas — toute conclusion se vérifie en direct avec `tp-kafka.sh` (Kafka) et `tp-db.sh` (PostgreSQL), et la CLI `diagnose.sh` reste la source de vérité.",
         "mode": "markdown"
       },
       "pluginVersion": "11.1.0",

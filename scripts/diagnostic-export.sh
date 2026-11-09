@@ -9,8 +9,10 @@
 #   ./scripts/diagnostic-export.sh --print      affiche la ligne au lieu de l'envoyer
 #
 # Variables : SIMULPIX_HEALTH_URL (défaut http://localhost:8082/health/details),
-#             SIMULPIX_DIAG_CACHE (défaut runtime/diagnostic-cache.json, partagé
-#             avec diagnose.sh — les règles à 2 échantillons restent valables),
+#             SIMULPIX_DIAG_CACHE (défaut runtime/diagnostic-cache-grafana.json —
+#             cache DÉDIÉ, séparé de diagnose.sh et de la campagne : chacun tient
+#             ses 2 échantillons ; un cache partagé entrelacerait les lectures
+#             (span < 10 s) et ferait retomber le moteur sur needs_second_sample),
 #             SIMULPIX_INFLUXDB_URL / _ORG / _BUCKET / _TOKEN (idem socle).
 #
 # Le moteur et le socle ne sont PAS modifiés : l'export est un adaptateur de
@@ -21,7 +23,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 HEALTH_URL="${SIMULPIX_HEALTH_URL:-http://localhost:8082/health/details}"
-CACHE="${SIMULPIX_DIAG_CACHE:-$REPO_DIR/runtime/diagnostic-cache.json}"
+CACHE="${SIMULPIX_DIAG_CACHE:-$REPO_DIR/runtime/diagnostic-cache-grafana.json}"
 CLI="$SCRIPT_DIR/lib/diagnose_cli.py"
 EXPORT="$SCRIPT_DIR/lib/diagnostic_export.py"
 
@@ -40,8 +42,13 @@ while [ $# -gt 0 ]; do
 done
 
 mkdir -p "$(dirname "$CACHE")"
-SAMPLE_FILE="$REPO_DIR/runtime/.diagnose-sample.json"
-VERDICT_FILE="$REPO_DIR/runtime/.diagnose-verdict.json"
+# fichiers de travail dérivés du nom du cache : la campagne et diagnose.sh
+# nettoient les leurs (runtime/.diagnose-sample.json) à chaque cas — l'exporteur
+# ne doit pas être dérangé pendant une campagne (frise en direct).
+CACHE_TAG="$(basename "$CACHE")"
+CACHE_TAG="${CACHE_TAG%.json}"
+SAMPLE_FILE="$REPO_DIR/runtime/.diagnose-sample-$CACHE_TAG.json"
+VERDICT_FILE="$REPO_DIR/runtime/.diagnose-verdict-$CACHE_TAG.json"
 trap 'rm -f "$SAMPLE_FILE" "$VERDICT_FILE"' EXIT
 
 run_once() {
