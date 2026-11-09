@@ -5,6 +5,16 @@ Première version, construite à partir de l'état des lieux
 règle de diagnostic : chaque ligne dit comment passer d'un symptôme à une cause nommée,
 avec une vérification indépendante.
 
+**v2 (09/11/2026) — deux symptômes distincts** : la matrice sépare désormais le
+symptôme 1 « **file d'attente qui grossit** » (famille `consumer_backlog`) du symptôme 2
+« **paiement traité trop lentement** » (famille `slow_processing`). L'analyse causale :
+**un traitement long engendre une attente grossissante, mais la réciproque est fausse** —
+une file qui grossit désigne l'amont (retard de lecture), alors que les causes possibles
+d'un traitement lent sont tranchées quand la file est vide (persistance lente, délai SLA
+trop court). Le déclencheur du symptôme 2 ne s'attend plus aux seuls dépassements SLA :
+une latence moyenne > SLA × 80 % sur 2 échantillons espacés d'au moins 10 s déclenche
+aussi la règle, sans attendre de nouveaux dépassements en base.
+
 ## La matrice
 
 | Symptôme vu en premier | Cause probable n°1 | Cause probable n°2 | Comment trancher | Si on ne peut pas trancher |
@@ -12,7 +22,7 @@ avec une vérification indépendante.
 | La file d'attente grossit (`pending_result_count` en hausse, lag en hausse) | une application qui lit les topics est en retard | PostgreSQL ne suit plus le flux | `tp-kafka.sh` : si le lag est sur `persister-valid`/`persister-rejected` et que `persistence_gap_*` grossit -> persistance. Si le lag est sur `validator` ou `decision-engine` -> retard de lecture | indéterminé : vérifier les motifs de refus (`tp-db.sh`), un `processing_timeout` massif pointe l'amont |
 | Des tranches de topics sont mal répliquées (URP > 0) | un broker est arrêté (grave) | la copie entre brokers est simplement en retard (bénin, passager) | `replication.brokers[]` : `offline_partitions_count` > 0 ou `active_controller_count` = 0 -> panne de broker. Sinon, si `broker_count` = 3 et les tranches se resynchronisent -> retard de copie | indéterminé : relancer la lecture 30 s plus tard, un retard de copie se résorbe seul, pas une panne |
 | Plus aucune écriture en base (`db_*` ne bouge plus) | PostgreSQL est indisponible ou saturé | l'amont ne produit plus rien (le générateur s'est arrêté) | `seconds_since_last_validated` en hausse **et** `counts.generated` qui stagne -> c'est l'amont. `counts.generated` qui continue de monter sans écriture -> PostgreSQL | indéterminé : vérifier directement avec `tp-db.sh` et le statut `services.postgres` |
-| Des paiements sont traités trop lentement (`validated_sla_breaches` en hausse) | un retard de lecture en amont (la file a grossi, les paiements attendent) | le délai accordé est trop court pour la charge | le lag vu par application (`tp-kafka.sh`) + la longueur de la file : si la file est longue au moment du dépassement -> retard en amont. Si la file est vide et qu'on dépasse quand même -> délai trop court | indéterminé : comparer le `decision_latency_ms` moyen en base avec le `decision_sla_seconds` du scénario |
+| Des paiements sont traités trop lentement (symptôme 2 : `validated_sla_breaches` en hausse OU `avg_validation_latency_ms` > `decision_sla_seconds` × 80 % sur 2 échantillons espacés) | un retard de lecture en amont (la file a grossi, les paiements attendent) | le traitement lui-même est long : persistance lente (écart de persistance qui s'accroît) ou délai SLA trop court pour la charge | l'état de la file tranche : file longue -> retard amont (`consumer_backlog`, lien causal explicite dans le résumé). File vide + `persistence_gap_*` qui s'accroît -> persistance (`persister_slow`). File vide + écart stable -> délai SLA trop court (`slow_processing`, configuration du scénario) | indéterminé (`ambiguous_sla`) : comparer `avg_validation_latency_ms` au `decision_sla_seconds` du scénario et vérifier les motifs en base (`tp-db.sh`) |
 | Le verdict global passe à `degraded` | un service ne répond plus (sonde) | une alerte grave s'est déclenchée | regarder `services.<nom>` : quel service est `down` ? Puis confirmer avec la sonde indépendante (`tp-kafka.sh` ou `tp-db.sh`) | indéterminé : la sonde peut être en échec à cause du réseau, vérifier le conteneur avec `docker ps` |
 
 ### Classement des causes : probabilité et criticité (v1)
@@ -37,8 +47,9 @@ Classement ligne par ligne (priorité d'examen = dans quel ordre vérifier les d
 | 2 | URP > 0 | broker arrêté | Faible | **Élevée** | **1re** | rare mais grave (RF=3, min ISR=2 : un 2e incident provoquerait l'indisponibilité) ; vérification immédiate (`offline_partitions_count`, `active_controller_count`) |
 | 3 | Plus aucune écriture en base | amont arrêté (générateur fini) | **Élevée** | Faible | **1re** | en fin de scénario c'est le cas **normal** (`generated` stagne) ; aucun risque de perte |
 | 3 | Plus aucune écriture en base | PostgreSQL indisponible/saturé | Moyenne | **Critique** | **2e** | perte durable potentielle ; à vérifier dès que `generated` continue de monter sans écriture (`services.postgres`, `tp-db.sh`) |
-| 4 | Paiements trop lents (`sla_breaches` ↑) | retard de lecture en amont | **Élevée** | Moyenne | **1re** | conséquence directe et fréquente d'un backlog : les Pix dépassent le TTL de 10 s (impact client réel mais explicable) |
-| 4 | Paiements trop lents (`sla_breaches` ↑) | délai trop court pour la charge | Faible | Moyenne | **2e** | problème de configuration du scénario, pas un incident de plateforme ; à soupçonner si la file est vide |
+| 4 | Paiements trop lents (symptôme 2) | retard de lecture en amont (file qui grossit) | **Élevée** | Moyenne | **1re** | lien causal : un traitement long (amont en retard) engendre une attente grossissante — les Pix s'accumulent et dépassent le TTL (famille consumer_backlog) |
+| 4 | Paiements trop lents (symptôme 2) | persistance lente (file vide, écart qui grossit) | Moyenne | **Élevée** | **2e** | la persistance ne suit plus : les paiements mettent du temps à être écrits — durabilité menacée, à écarter vite (`persistence_gap_*` + `tp-db.sh`) |
+| 4 | Paiements trop lents (symptôme 2) | délai SLA trop court pour la charge (file vide, écart stable) | Faible | Moyenne | **3e** | configuration du scénario, pas un incident de plateforme ; famille `slow_processing`, à soupçonner quand la file reste vide |
 | 5 | Verdict `degraded` | service ne répond plus | Faible | **Élevée** (selon service) | **1re** | dépend du service : un persister down = criticité élevée, un shaper down = cosmétique ; vérification directe (`services.<nom>`) |
 | 5 | Verdict `degraded` | sonde en échec (réseau, faux positif) | Moyenne | Faible | **2e** | la sonde peut être aveuglée par la perturbation réseau elle-même — croiser avec la sonde indépendante avant de conclure |
 

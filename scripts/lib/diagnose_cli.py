@@ -36,6 +36,7 @@ CACHE_VERSION = 1
 FAMILY_LABELS = {
     "healthy": "flux sain (aucune cause nommée)",
     "consumer_backlog": "retard de consommateur (état A)",
+    "slow_processing": "traitement trop lent (état D)",
     "kafka_replication": "réplication dégradée (état B)",
     "persistence": "persistance défaillante (état C)",
     "indeterminate": "INDÉTERMINÉ (pas de conclusion)",

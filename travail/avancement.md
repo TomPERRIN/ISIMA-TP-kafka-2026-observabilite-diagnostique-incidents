@@ -2,7 +2,7 @@
 
 > Fichier de suivi d'avancement détaillé (ce qui est fait, résultats, décisions).
 > Les tâches restantes sont pilotées dans [`TODO.md`](TODO.md).
-> Dernière mise à jour : 2026-11-08.
+> Dernière mise à jour : 2026-11-09.
 
 ---
 
@@ -20,7 +20,8 @@
 | Vérification croisée + non-confusion (phase 5) | ✅ fait (05/11) | `scripts/cross-check.sh` : 4 cas → **4/4 PASS**, chaque conclusion cross-checkée Kafka+PG, fermeture single-snapshot compteurs==PG — candidate #2 démontrée (`preuves/phase5-croisee-2026-11-05/`) |
 | Livrables finaux (guide, note de conception, conclusion) | ✅ fait (05/11) | `docs/operations/guide-diagnostic.md` + `docs/architecture/diagnostic-engine-design.md` (portée/limites = conclusion) ; protocoles + relevés déjà en place (§1.7/§1.8) |
 | Extension : impact métier (candidate #7, phase 7) | ✅ fait (05/11) | Bloc `business_impact` dans chaque verdict, vérifiable en base ; preuve 6/6 (moteur == sonde PG == SQL : 278==278==278) — `preuves/phase7-impact-metier-2026-11-05/` + `scripts/impact-metier-proof.sh` |
-| Extension : vue Grafana permanente du diagnostic | ✅ fait (08/11) | Dashboard `simul-pix-diagnostic` + exporteur `diagnostic-export.sh` (étiquette « État sain » quand verdict healthy) ; cycle incident C-postgres-indispo capturé (3 captures) — `preuves/phase6-grafana-diagnostic-2026-11-08/` |
+| Extension : vue Grafana permanente du diagnostic | ✅ fait (08/11) | Dashboard `simulpix-diagnostic` + exporteur `diagnostic-export.sh` (étiquette « État sain » quand verdict healthy) ; cycle incident C-postgres-indispo capturé (3 captures) — `preuves/phase6-grafana-diagnostic-2026-11-08/` |
+| Extension v2 : deux symptômes distincts (file qui grossit vs traitement lent) | ✅ fait (09/11) | Famille `slow_processing` (verdict D) + déclencheur latence > SLA sur 2 échantillons ; cas D `D-traitement-lent` dans la campagne ; matrice v2 + 37 tests ; **démo Grafana en une commande** (`demo-diagnostic.sh`) + couverture automatique du rapport — couverture live à rejouer quand la plateforme tourne |
 
 ---
 
@@ -331,6 +332,77 @@ reste la **source de vérité** (le dashboard affiche, il ne prouve pas).
 
 ---
 
+### 1.12 Deux symptômes distincts — famille `slow_processing` (09/11/2026)
+
+**Choix** : le sujet demande aussi de distinguer deux symptômes différents — la
+**file d'attente qui grossit** (symptôme 1, famille `consumer_backlog`) et le
+**paiement traité trop lentement** (symptôme 2, **nouvelle famille `slow_processing`**,
+verdict D). L'analyse causale : **un traitement long engendre une attente
+grossissante, mais la réciproque est fausse** — une file qui grossit désigne l'amont,
+alors que les causes possibles d'un traitement lent (persistance lente, délai SLA trop
+court, retard amont) sont tranchées automatiquement par l'état de la file.
+
+- **Moteur** (`scripts/lib/diagnose_engine.py`) : `VERDICTS` += `slow_processing` ;
+  `sla_config` rattaché à cette famille (le rattachement à `consumer_backlog` était
+  trompeur) ; `_rule_sla` réécrite avec **2 déclencheurs** (dépassements SLA en hausse
+  OU latence moyenne > SLA × 80 % sur **les 2 lectures**, sans attendre les breaches) ;
+  découpage par état de la file : file longue → `upstream_backlog_sla`
+  (`consumer_backlog`, lien causal explicite dans le résumé), file vide + écart qui
+  grossit → `persister_slow` (`persistence`), file vide + écart stable + latence haute
+  → `sla_config` (`slow_processing`), file vide + rien → `ambiguous_sla` ;
+  `route()` appelle `_rule_sla` aussi à une seule lecture (→ `needs_second_sample`) ;
+- **Tests** : 5 nouveaux tests (déclencheur sans breaches, écart qui grossit =
+  persister_slow, single sample ne conclut jamais, latence haute à une seule lecture,
+  non-confusion file longue = backlog) — **37/37** ; pipeline 6/6 (non-régression) ;
+- **Cas D de campagne** (`scripts/diagnostic-campaign.sh`, cas `D-traitement-lent`) :
+  scénario nominal lancé via l'UI (`POST /control`, `decision_sla_seconds=3`) +
+  perturbation `kafka_latency` (250 ms/requête sur `pix-decision-engine`) au milieu du
+  flux ; le moteur lit le SLA de l'UI (`/health/details?decision_sla_seconds=3`) ;
+- **Consommateurs alignés** : `diagnose_cli.py` (étiquette « traitement trop lent
+  (état D) »), `diagnostic_export.py` (state_code 4), `campaign_report.py` (famille +
+  attendu D), dashboard Grafana (mapping « traitement lent (D) », bleu) ;
+- **Docs** : matrice v2 (`travail/notes/matrice-symptomes-causes.md`, intro 2
+  symptômes + analyse causale, ligne 4 à 3 causes), note de conception (schéma
+  6 états, catalogue, note « Deux symptômes distincts »), guide praticien (6
+  verdicts, commande `--cases D-traitement-lent`), TODO phase 3 + 4.
+
+---
+
+### 1.13 Démo en une commande + couverture automatique (09/11/2026)
+
+**Choix** : les tests doivent se lancer **sans multiplier les terminaux**, et le
+rapport doit prouver que **tous les problèmes cités sont étudiés** (un run partiel
+`--cases` ne doit pas ressembler à une campagne complète).
+
+- **`scripts/demo-diagnostic.sh`** — UNE commande, UN terminal : exporteur Grafana
+  en arrière-plan (trap EXIT pour l'arrêt propre), URL du dashboard affichée
+  (`/d/simulpix-diagnostic`), campagne lancée (options transmises : `--quick`,
+  `--cases`, `--pause`) ;
+- **cache dédié de l'exporteur** (`diagnostic-export.sh` →
+  `runtime/diagnostic-cache-grafana.json`, fichiers de travail dérivés du cache) —
+  un cache partagé entrelacerait les lectures (span < 10 s) et ferait retomber le
+  moteur sur `needs_second_sample` pendant toute la campagne, et chaque début de
+  cas effacerait le cache de l'exporteur ;
+- **`diagnostic-campaign.sh` : option `--pause`** (Entrée entre les cas, observation
+  de la frise) + rappel de la sortie diagnostic attendue à chaque cas
+  (`verdict_attendu`) ;
+- **couverture automatique** (`campaign_report.py coverage()`) : section
+  « Couverture des problèmes étudiés » dans `SYNTHESE.md` + `campaign-summary.json` —
+  chaque famille d'incident doit être VUE dans les verdicts d'un cas qui l'attend,
+  sinon ❌ (même sur un run partiel) ; témoin 0 FP + indéterminé explicite rapportés ;
+- **`scripts/lib/test_campaign_report.py`** — 10 tests : le mapping cas → famille
+  attendue couvre les 4 familles (protège l'ajout de cas futurs), un run partiel est
+  signalé 1/4, une famille vue par un cas qui ne l'attend pas ne prouve rien,
+  témoin/indéterminé rapportés ;
+- **docs** : protocole phase 4 (3 commandes, cas D, tableau « problèmes étudiés →
+  diagnostic en sortie »), guide praticien §8 (démo une commande).
+
+Rendu vérifié sur relevés synthétiques (run partiel : couverture 1/4, famille
+manquante signalée ❌). Les 3 suites passent : moteur **37/37**, rapport **10/10**,
+pipeline **6/6**.
+
+---
+
 ## 2. Journal des décisions
 
 | Date | Décision |
@@ -357,6 +429,8 @@ reste la **source de vérité** (le dashboard affiche, il ne prouve pas).
 | 05/11/2026 | **Relecture croisée guide + note de conception** : imprécision corrigée sur le service down (conclusif pour un service à famille, `transversal`/`probe_blinded` sinon — vérifié dans le code), timeline A calée sur les horodatages, table des seuils clarifiée |
 | 05/11/2026 | **Phase 7 (impact métier, candidate #7) implémentée** : bloc `business_impact` factuel dans le verdict (moteur croise les compteurs SLA du socle, branche-cause intacte, garde-fous identiques) ; 32 tests OK ; preuve live moteur==sonde==SQL 278==278 (6/6) dans `preuves/phase7-impact-metier-…` ; adaptative et vue HTTP restent en réserve |
 | 08/11/2026 | **Vue Grafana permanente du diagnostic livrée** (sortie de réserve) : dashboard provisionné `simul-pix-diagnostic` + exporteur `diagnostic-export.sh` — la CLI reste le produit et la source de vérité ; étiquette « État sain — aucun incident actif » quand le verdict est `healthy` ; cycle incident C-postgres-indispo capturé (`preuves/phase6-grafana-diagnostic-2026-11-08/`, 3 captures) ; socle du prof non touché |
+| 09/11/2026 | **Deux symptômes distincts (v2)** : nouvelle famille **`slow_processing`** (verdict D, paiement traité trop lentement) distincte de `consumer_backlog` (file qui grossit) — l'analyse causale : **un traitement long engendre une attente grossissante, mais les causes d'un traitement lent se tranchent file vide** ; déclencheur latence > SLA × 80 % sur 2 échantillons (sans attendre les breaches) ; cas D `D-traitement-lent` (scénario via UI + `kafka_latency`) ; 37 tests ; matrice v2 ; **couverture live du cas D à rejouer quand la plateforme tourne** |
+| 09/11/2026 | **Démo en une commande + couverture automatique** : `demo-diagnostic.sh` (exporteur Grafana + campagne, un seul terminal, cache exporteur dédié), option `--pause` de la campagne, couverture « problèmes étudiés » dans le rapport (famille non vue = ❌, même en run partiel `--cases`) — 10 tests du mapping (`test_campaign_report.py`) |
 
 ---
 
@@ -378,6 +452,12 @@ Rien en cours — phases 2 à 7 closes. La garantie #1 est mesurée et tenue (ju
 livrables finaux sont édités et la candidate #7 (impact métier) est implémentée et
 prouvée (6/6). Il reste la dimension théorique (facultative, encouragée) et le rendu
 GitHub final.
+
+**En attente de plateforme (v2, 09/11)** : la couverture live du cas D
+(`D-traitement-lent`, famille `slow_processing`) — délai de détection ≤ 30 s — n'est
+pas mesurable hors Docker ; le cas est codé et rejouable en une commande
+(`./scripts/demo-diagnostic.sh --cases D-traitement-lent`), à tourner quand la
+stack est relancée.
 
 ---
 

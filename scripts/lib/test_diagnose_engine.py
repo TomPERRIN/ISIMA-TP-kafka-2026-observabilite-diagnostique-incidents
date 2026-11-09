@@ -7,10 +7,14 @@ Exécution :
 
 Les fixtures produisent des payloads au format ``/health/details`` (synthétiques,
 conformes à la référence nominale mesurée). Chaque test encode une case de la
-matrice v1 (travail/notes/matrice-symptomes-causes.md) et/ou un critère du sujet :
+matrice v2 (travail/notes/matrice-symptomes-causes.md) et/ou un critère du sujet :
   - critère #1 : pas de confusion retard de consommateur / réplication / persistance
     (chaque incident d'essai est testé séparément, famille par famille).
   - critère #4 : les 2 causes d'un symptôme sont séparées automatiquement ;
+  - symptôme 1 (file d'attente qui grossit) vs symptôme 2 (paiement traité trop
+    lentement) : 2 familles distinctes (consumer_backlog / slow_processing), causes
+    tranchées par l'état de la file — un traitement long engendre une attente
+    grossissante, mais les causes d'un traitement lent sont tranchées file vide ;
   - critère #5 : toute conclusion ≠ indéterminé exige la double lecture Kafka+PG ;
   - critère #6 : sondes périmées -> indéterminé, jamais une conclusion ;
   - témoin nominal : un rattrapage éclair, un écart de persistance léger
@@ -104,7 +108,7 @@ def verdict(payload, now, previous=None, config=None):
 class DiagnoseEngineTest(unittest.TestCase):
     """Chaque test = une case de la matrice ou un garde-fou du sujet."""
 
-    # ---------- ligne 1 : file d'attente grossit ----------
+    # ---------- symptôme 1 : file d'attente qui grossit (ligne 1) ----------
 
     def test_nominal_healthy_single_sample(self):
         v = verdict(base_payload(T0), now=T0)
@@ -231,9 +235,10 @@ class DiagnoseEngineTest(unittest.TestCase):
         self.assertEqual(v["verdict"], "persistence")
         self.assertEqual(v["cause"], "postgres_unavailable")
 
-    # ---------- ligne 4 : dépassements SLA ----------
+    # ---------- symptôme 2 : paiement traité trop lentement (ligne 4) ----------
 
     def test_sla_breaches_with_long_queue_is_upstream_backlog(self):
+        # lien causal : un traitement long (amont en retard) engendre une file qui grossit
         p0 = with_flow(base_payload(T0 - SPAN), generated=140, database=100, pending=240)
         counts(p0, validated_sla_breaches=0)
         p1 = with_flow(base_payload(T0), generated=140, database=100, pending=240)
@@ -241,19 +246,71 @@ class DiagnoseEngineTest(unittest.TestCase):
         v = verdict(p1, now=T0, previous=previous_of(p0, T0))
         self.assertEqual(v["verdict"], "consumer_backlog")
         self.assertEqual(v["cause"], "upstream_backlog_sla")
+        self.assertIn("attente grossissante", v["summary"])
 
     def test_sla_breaches_empty_queue_and_high_latency_is_config(self):
-        # matrice ligne 4 cause 2 : file vide + latence > SLA -> configuration trop courte
+        # cause configuration : file vide + écart stable + latence > SLA -> traitement long
         p0 = base_payload(T0 - SPAN)
         counts(p0, validated_sla_breaches=0)
         p1 = base_payload(T0)
         counts(p1, validated_sla_breaches=20)
         p1["metrics"]["timings"]["avg_validation_latency_ms"] = 12000.0
         v = verdict(p1, now=T0, previous=previous_of(p0, T0))
-        self.assertEqual(v["verdict"], "consumer_backlog")
+        self.assertEqual(v["verdict"], "slow_processing")
         self.assertEqual(v["cause"], "sla_config")
         self.assertTrue(any("latence" in s.lower() or "config" in s.lower()
                             for s in (v["summary"],)))
+
+    def test_slow_processing_latency_trigger_without_breaches(self):
+        # déclencheur #2 : latence > SLA sur LES 2 lectures, sans attendre les breaches
+        p0 = base_payload(T0 - SPAN)
+        p0["metrics"]["timings"]["avg_validation_latency_ms"] = 12000.0
+        p1 = base_payload(T0)
+        counts(p1, generated=112, validated=112, db_validated_count=112,
+               persisted_valid=112, outcome_count=112)
+        p1["metrics"]["timings"]["avg_validation_latency_ms"] = 12000.0
+        v = verdict(p1, now=T0, previous=previous_of(p0, T0))
+        self.assertEqual(v["verdict"], "slow_processing")
+        self.assertEqual(v["cause"], "sla_config")
+
+    def test_slow_processing_with_rising_gap_is_persister_slow(self):
+        # cause persistance : file vide mais écart de persistance qui S'ACCROÎT
+        p0 = with_persister(base_payload(T0 - SPAN), lag=2, gap=0, db=100)
+        p0["metrics"]["timings"]["avg_validation_latency_ms"] = 12000.0
+        p1 = with_persister(base_payload(T0), lag=4, gap=8, db=108)
+        p1["metrics"]["timings"]["avg_validation_latency_ms"] = 12000.0
+        v = verdict(p1, now=T0, previous=previous_of(p0, T0))
+        self.assertEqual(v["verdict"], "persistence")
+        self.assertEqual(v["cause"], "persister_slow")
+
+    def test_slow_processing_single_sample_never_concludes(self):
+        # contrat du moteur : le traitement lent ne se conclut pas sur UNE lecture
+        p = base_payload(T0)
+        p["metrics"]["timings"]["avg_validation_latency_ms"] = 12000.0
+        v = verdict(p, now=T0)
+        self.assertEqual(v["verdict"], "indeterminate")
+        self.assertEqual(v["indeterminate_reason"], "needs_second_sample")
+
+    def test_slow_processing_latency_high_on_one_sample_only_needs_second_sample(self):
+        # le déclencheur exige la latence haute sur LES 2 lectures (pas une seule)
+        p0 = base_payload(T0 - SPAN)
+        p1 = base_payload(T0)
+        counts(p1, generated=112, validated=112, db_validated_count=112,
+               persisted_valid=112, outcome_count=112)
+        p1["metrics"]["timings"]["avg_validation_latency_ms"] = 12000.0
+        v = verdict(p1, now=T0, previous=previous_of(p0, T0))
+        self.assertEqual(v["verdict"], "indeterminate")
+        self.assertEqual(v["indeterminate_reason"], "needs_second_sample")
+
+    def test_slow_processing_queue_long_stays_backlog(self):
+        # non-confusion : latence haute MAIS file qui grossit -> amont, pas slow_processing
+        p0 = with_flow(base_payload(T0 - SPAN), generated=140, database=100, pending=240)
+        p0["metrics"]["timings"]["avg_validation_latency_ms"] = 12000.0
+        p1 = with_flow(base_payload(T0), generated=140, database=100, pending=240)
+        p1["metrics"]["timings"]["avg_validation_latency_ms"] = 12000.0
+        v = verdict(p1, now=T0, previous=previous_of(p0, T0))
+        self.assertEqual(v["verdict"], "consumer_backlog")
+        self.assertEqual(v["cause"], "upstream_backlog_sla")
 
     def test_sla_breaches_cannot_settle_without_signals(self):
         # file vide + latence dans le seuil : on ne tranche pas (dépassés historiques)

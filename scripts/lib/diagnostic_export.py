@@ -31,10 +31,11 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict, Optional
 
-# Les 5 états du moteur (mêmes clés que FAMILY_LABELS de diagnose_cli.py).
+# Les 6 états du moteur (mêmes clés que FAMILY_LABELS de diagnose_cli.py).
 STATE_CODES = {
     "healthy": 0,
     "consumer_backlog": 1,
+    "slow_processing": 4,
     "kafka_replication": 2,
     "persistence": 3,
     "indeterminate": -1,
