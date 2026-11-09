@@ -5,7 +5,7 @@
 # Usage :
 #   ./scripts/demo-incident.sh [A|B|C]     (défaut : A)
 #
-#   A  retard consommateur  : la décision est ralentie, la file grossit    (orange)
+#   A  retard consommateur  : la décision est ralentie, la file grossit    (orange, ~40 s)
 #   B  réplication dégradée : un broker Kafka est en pause                 (jaune)
 #   C  panne PostgreSQL     : la base est arrêtée au milieu du flux        (rouge)
 #
@@ -68,9 +68,9 @@ cd "$REPO_DIR"
 
 case "$CASE" in
   A)
-    echo "[demo] 1/2 scénario consumer_lag : recréation + décision ralentie + 600 messages"
-    ./scripts/run-scenario.sh consumer_lag 600 20 | tail -1
-    echo "[demo] 2/2 le backlog se vide (~3-4 min) : phase orange puis retour au vert"
+    echo "[demo] 1/2 scénario consumer_lag : recréation + décision ralentie + 100 messages (incident ~40 s)"
+    ./scripts/run-scenario.sh consumer_lag 100 20 | tail -1
+    echo "[demo] 2/2 le backlog se vide (~40 s) : phase orange puis retour au vert"
     ;;
   B)
     echo "[demo] 1/2 scénario replication_lag : réplication dégradée sur kafka-3"
