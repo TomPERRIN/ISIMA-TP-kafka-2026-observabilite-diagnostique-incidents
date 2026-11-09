@@ -2,7 +2,7 @@
 #
 # diagnostic-campaign.sh — campagne d'incidents provoqués (SAÉ 5, phase 4)
 #
-# Exécute la matrice d'essais du pilotage (travail/TODO.md §3) :
+# Exécute la matrice d'essais de la phase 4 (pilotage : TODO-SAE5.md §7) :
 #
 #   temoin-1..N    scénario nominal SANS incident — contrôle des faux positifs
 #                  (critère #4 : 0 diagnostic d'incident sur ≥ 5 nominaux) ;
@@ -328,6 +328,11 @@ for case_name in "${CASES[@]}"; do
                  SIMULPIX_PERSIST_REJECTED_DELAY_MS_OVERRIDE="$C_PERSIST_MS" \
             ./scripts/run-scenario.sh consumer_lag $PROFILE_INCIDENT)
       run_case "$case_name" "${ARGS[@]}" || true
+      ;;
+    D-traitement-lent)
+      # déroulé spécifique géré par run_case (POST /control + perturbation
+      # réseau au milieu du flux) : pas de commande scénario
+      run_case "$case_name" || true
       ;;
     *)
       echo "[campaign] cas inconnu : $case_name (ignoré)" >&2

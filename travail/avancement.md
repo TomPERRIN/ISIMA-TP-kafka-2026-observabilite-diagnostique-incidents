@@ -73,7 +73,7 @@
 - `TODO-SAE5.txt` réécrit en **`TODO-SAE5.md`** : Markdown lisible (TOC, tableaux, décisions mises en évidence, candidats de garantie détaillés).
 - **Plan d'architecture extrait** dans un fichier dédié : `docs/architecture/plan-architecture-sae5.md` (socle, couche d'observabilité, chaîne applicative, architecture cible du moteur de diagnostic, 3 vues de lecture, intégration dans le dépôt).
 - `TODO-SAE5.md` §2 remplacé par un lien vers le plan ; sa Phase 2 fusionnée avec l'inventaire métriques.
-- **`travail/avancement.md`** (ce fichier) + **`travail/TODO.md`** (pilotage fusionné TODO-SAE5 + inventaire métriques).
+- **`travail/avancement.md`** (ce fichier) + **`travail/TODO.md`** (pilotage fusionné TODO-SAE5 + inventaire métriques) — *supprimé le 09/11/2026 : pilotage unifié dans `TODO-SAE5.md`, qui couvrait déjà tout son contenu (phases 0-9, règles, outils)*.
 
 ### 1.5 Matrice symptôme / cause probable / vérification (04/11/2026, commit `05c67db`)
 
@@ -463,6 +463,7 @@ passent : moteur **37/37**, rapport **10/10**, pipeline **6/6**, angles morts **
 | 09/11/2026 | **Démo en une commande + couverture automatique** : `demo-diagnostic.sh` (exporteur Grafana + campagne, un seul terminal, cache exporteur dédié), option `--pause` de la campagne, couverture « problèmes étudiés » dans le rapport (famille non vue = ❌, même en run partiel `--cases`) — 10 tests du mapping (`test_campaign_report.py`) |
 | 09/11/2026 | **Angles morts démontrés mécaniquement** : `demo-angles-morts.sh` + `blind_spots.py` — 9 cas du catalogue (B3/B4/C3/C4 + registre §5) simulés par payloads synthétiques frais passés au vrai moteur, verdict calculé à l'exécution (pas codé en dur) ; limite majeure DÉMONTRÉE : une sonde qui ment en restant fraîche produit un `healthy` erroné (C4b) — 16 tests (`test_blind_spots.py`) ; sans Docker, rejouable en soutenance |
 | 09/11/2026 | **Angles morts sur la frise Grafana** : mode `--export` de `blind_spots.py` — les 14 états (chaque étape de chaque cas, pas seulement les verdicts finaux) poussés via le protocole de `diagnostic_export.py` (`verdict_to_line` + `send_line`, métrique `simulpix_diagnostic`, dashboard NON modifié) ; timestamp = moment du push, hold 5 s entre deux états (`SIMULPIX_BLIND_HOLD_S`, `--hold`) pour que chaque segment reste lisible ; `--print` = répétition sèche sans envoi — 6 tests (14 lignes valides, compteurs healthy=9/kafka=2/persistence=1/indeterminate=2, abandon à la 1re écriture en échec, hold entre les états mais pas après le dernier) |
+| 09/11/2026 | **Nettoyage pour le premier rendu** : scripts orphelins supprimés (`demo-incident.sh`, `test-network-perturb.py`), pilotage unifié (`travail/TODO.md` supprimé, couvert par `TODO-SAE5.md`), preuve de rejeu renommée sans login (`phase4-campagne-rejeu-2026-11-08`), `TP/SAé/AGENT.md` (artefact d'agent anglais) retiré, branche `D-traitement-lent` ajoutée dans la dispatch de `diagnostic-campaign.sh` (le cas était ignoré silencieusement), différence `stop.sh` (purge) / `stop-platform.sh` (stop simple) documentée, README à jour (démos, suites de tests 6+37+10+22, traçabilité des `run_*.py` générateurs des `.xlsx`) |
 
 ---
 
