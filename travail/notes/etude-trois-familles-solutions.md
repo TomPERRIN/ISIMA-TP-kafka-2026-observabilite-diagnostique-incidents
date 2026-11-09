@@ -167,5 +167,5 @@ tâches suivantes, push de la branche de chacun (section 3.3 du TODO).
 - Arbre : [matrice-risques-arbre.svg](matrice-risques-arbre.svg) · Matrice : [matrice-symptomes-causes.md](matrice-symptomes-causes.md)
 - Théorie : [docs/architecture/analyse-theorique-diagnostic.md](../../docs/architecture/analyse-theorique-diagnostic.md)
 - Produit : [docs/architecture/diagnostic-engine-design.md](../../docs/architecture/diagnostic-engine-design.md) · Guide : [docs/operations/guide-diagnostic.md](../../docs/operations/guide-diagnostic.md)
-- Preuves : [preuves/phase4-campagne-2026-11-05/](../../preuves/phase4-campagne-2026-11-05/) (origine) · [preuves/phase4-campagne-rejeu-Madiak5-2026-11-08/](../../preuves/phase4-campagne-rejeu-Madiak5-2026-11-08/) (rejeu indépendant)
+- Preuves : [preuves/phase4-campagne-2026-11-05/](../../preuves/phase4-campagne-2026-11-05/) (origine) · [preuves/phase4-campagne-rejeu-2026-11-08/](../../preuves/phase4-campagne-rejeu-2026-11-08/) (rejeu indépendant)
 - Inventaire des signaux : [metriques-observabilite.md](metriques-observabilite.md)
