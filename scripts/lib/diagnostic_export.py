@@ -120,7 +120,9 @@ def verdict_to_line(verdict: Dict[str, Any], timestamp_ns: Optional[int] = None)
                 candidate_status, candidate_label, candidate_prob, candidate_crit))
         causes_list = " • ".join(parts)
     else:
-        causes_list = "aucune cause candidate"
+        # Pas de cause candidate : champ vide — la vue n'affiche rien quand
+        # l'état est sain (les causes n'existent que pendant un incident).
+        causes_list = ""
 
     fields = [
         "state_code=%di" % STATE_CODES[family],
