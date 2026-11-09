@@ -597,9 +597,13 @@
             {
               "type": "value",
               "options": {
-                "aucune cause candidate": {
+                "—": {
                   "text": "",
                   "index": 0
+                },
+                "aucune cause candidate": {
+                  "text": "",
+                  "index": 1
                 }
               }
             }
