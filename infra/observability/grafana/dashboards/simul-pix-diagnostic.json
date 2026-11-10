@@ -39,7 +39,7 @@
         "mode": "markdown"
       },
       "pluginVersion": "11.1.0",
-      "title": "",
+      "title": "Contexte",
       "type": "text"
     },
     {
@@ -265,7 +265,7 @@
           "refId": "A"
         }
       ],
-      "title": "Probabilité",
+      "title": "Probabilité de l'incident probable",
       "type": "stat"
     },
     {
@@ -324,7 +324,7 @@
           "refId": "A"
         }
       ],
-      "title": "Criticité",
+      "title": "Criticité de l'incident probable",
       "type": "stat"
     },
     {
@@ -585,7 +585,7 @@
         "mode": "markdown"
       },
       "pluginVersion": "11.1.0",
-      "title": "",
+      "title": "Aide de lecture",
       "type": "text"
     },
     {

@@ -20,7 +20,7 @@
         "mode": "markdown"
       },
       "pluginVersion": "11.1.0",
-      "title": "",
+      "title": "Aide de lecture",
       "type": "text"
     },
     {
@@ -145,7 +145,7 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "lignes PostgreSQL rejetees / s"
+                "value": "lignes PostgreSQL rejetées / s"
               },
               {
                 "id": "color",
@@ -979,7 +979,7 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "rejetes BDD"
+                "value": "rejetés BDD"
               },
               {
                 "id": "color",
@@ -1143,7 +1143,7 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "rejetes 5m"
+                "value": "rejetés 5m"
               },
               {
                 "id": "color",
@@ -1307,7 +1307,7 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "rejetes 30m"
+                "value": "rejetés 30m"
               },
               {
                 "id": "color",
@@ -1554,7 +1554,7 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "taille rejetes"
+                "value": "taille rejetés"
               },
               {
                 "id": "unit",

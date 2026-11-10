@@ -251,6 +251,11 @@ Les arguments `total_messages` et `rate_per_second` peuvent aussi être laissés
 Scénarios disponibles :
 
 - `nominal` : flux valide de bout en bout ;
+- `errors_simple` : erreurs métier simples ;
+- `mixed` : mélange de succès et d'erreurs ;
+- `consumer_lag` : ralentissement applicatif pour faire monter le lag ;
+- `replication_lag` : arrêt temporaire d'un broker pendant l'émission ;
+- `football_match_peak` : charge compressée dans le temps avec phase de base puis pic.
 
 ### Visualiser les groupes de conteneurs
 
@@ -265,11 +270,6 @@ Ce script affiche les conteneurs Docker regroupés par rôle pédagogique :
 - persistance
 - observabilité
 - middleware
-- `errors_simple` : erreurs métier simples ;
-- `mixed` : mélange de succès et d'erreurs ;
-- `consumer_lag` : ralentissement applicatif pour faire monter le lag ;
-- `replication_lag` : arrêt temporaire d'un broker pendant l'émission ;
-- `football_match_peak` : charge compressée dans le temps avec phase de base puis pic.
 
 Chaque lancement crée aussi des consumer groups dédiés au run courant et les persiste dans `runtime/current-run.env`.
 

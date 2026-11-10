@@ -646,7 +646,7 @@
           "refId": "A"
         }
       ],
-      "title": "Controleur actif du cluster",
+      "title": "Contrôleur actif du cluster",
       "type": "timeseries",
       "description": "Montre quel broker porte le rôle de contrôleur actif sur la période affichée.",
       "pluginVersion": "11.1.0"
