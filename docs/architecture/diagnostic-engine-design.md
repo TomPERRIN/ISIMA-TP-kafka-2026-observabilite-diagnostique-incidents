@@ -93,7 +93,7 @@ Ordre et garde-fous, tels que codés :
 
 | Champ | Contenu | Écho des livrables |
 |---|---|---|
-| `verdict` | `healthy`, `consumer_backlog`, `kafka_replication`, `persistence`, `indeterminate` | les états de la garantie |
+| `verdict` | `healthy`, `consumer_backlog`, `slow_processing`, `kafka_replication`, `persistence`, `indeterminate` | les états de la garantie |
 | `cause` + `cause_label`, `probability`, `criticality` | cause nommée (null si `healthy`/`indeterminate`) | classement de la matrice |
 | `plausible_causes[]` | causes candidates ordonnées par priorité d'examen, avec status | le praticien suit l'ordre |
 | `evidence[]` | preuves à double lecture par source (`kafka` / `postgres` / `platform`) — inclut les deltas (`gap 3 → 319`, `db total 300 → 300 figé`) | le verdict cite ses chiffres |
@@ -112,12 +112,23 @@ Ordre et garde-fous, tels que codés :
 |---|---|---|---|---|
 | `reader_backlog` | consumer_backlog | Élevée | Moyenne | `./scripts/tp-kafka.sh` |
 | `upstream_backlog_sla` | consumer_backlog | Élevée | Moyenne | `./scripts/tp-kafka.sh` |
-| `sla_config` | consumer_backlog | Faible | Moyenne | matrice ligne 4 |
+| `sla_config` | slow_processing | Faible | Moyenne | matrice v2 ligne 4 : comparer `avg_validation_latency_ms` au SLA du scénario |
 | `persister_slow` | persistence | Moyenne | Élevée | `tp-kafka.sh` puis `tp-db.sh` |
 | `postgres_unavailable` | persistence | Moyenne | **Critique** | `./scripts/tp-db.sh` |
 | `broker_down` | kafka_replication | Faible | Élevée | `./scripts/tp-kafka.sh` |
 | `replication_catchup` | kafka_replication | Élevée | Faible | `tp-kafka.sh` + relire ~30 s |
 | `upstream_stopped_normal` | healthy | Élevée | Faible | `tp-db.sh` (base figée expliquée) |
+
+Deux symptômes distincts (matrice v2, 09/11/2026) : la **file d'attente qui grossit**
+(symptôme 1, famille `consumer_backlog`) n'est pas le **paiement traité trop lentement**
+(symptôme 2, famille `slow_processing`). La règle ligne 4 (`_rule_sla`) se déclenche sur
+2 déclencheurs : dépassements SLA **en hausse** entre 2 lectures, OU latence moyenne
+> SLA × 80 % sur **les 2 lectures** (sans attendre les breaches) ; à UNE seule lecture,
+elle répond `needs_second_sample`. Puis l'état de la file tranche la cause : file longue
+→ `upstream_backlog_sla` (lien causal : un traitement long engendre une attente
+grossissante) ; file vide + écart de persistance qui s'accroît → `persister_slow` ;
+file vide + écart stable + latence haute → `sla_config` (slow_processing) ; file vide +
+aucun autre signal → `ambiguous_sla`.
 
 Exemple retrouvé pendant les essais : sur `URP > 0`, le moteur vérifie **d'abord**
 `broker_down` (critique, vérification instantanée) avant de conclure
@@ -154,7 +165,7 @@ fraîcheur détectables restent celles du snapshot réplication et de l'activit�
 | span minimal (10 s) | `MIN_SAMPLE_SPAN` | anti lag éclair (2 lectures trop proches ne disent rien) ; v1 à 5 s restait bloquée en `needs_second_sample` |
 | âge max de l'échantillon précédent (900 s) | `PREVIOUS_MAX_AGE_SECONDS` | au-delà de 15 min, le cache n'est pas une série fiable : pas de delta entre époques sans lien |
 | brokers attendus (3) | `EXPECTED_BROKERS` | RF=3 / min ISR=2 : `broker_count < 3` déclenche déjà le chemin grave (`broker_down`), sans attendre offline>0 |
-| marge latence / SLA (0.8) | `SLA_LATENCY_MARGIN` | SLA de décision 10 s (matrice ligne 4) : affichée en preuve (`latence vs SLA, marge 80 %`) pour aider à trancher retard amont vs délai trop court |
+| marge latence / SLA (0.8) | `SLA_LATENCY_MARGIN` | SLA de décision 10 s (matrice v2 ligne 4) : un déclencheur du symptôme « traitement lent » est `avg_validation_latency_ms` > SLA × 80 % sur les 2 lectures — affichée en preuve (`latence vs SLA, marge 80 %`) pour trancher retard amont vs délai trop court |
 
 ---
 
@@ -207,6 +218,11 @@ démonstration de non-confusion backlog/rejet métier/perte en campagne croisée
 **impact métier par incident** (phase 7) : « X Pix dépassent le SLA de décision »,
 vérifié en base à la ligne près (278 == 278, delta contrôlé 0 == 0).
 
+**v2 (09/11/2026)** : le cas D (`D-traitement-lent`, famille `slow_processing`) est
+codé dans la campagne (`diagnostic-campaign.sh`) et testé unitairement (37 tests) ;
+sa couverture live (délai de détection ≤ 30 s) reste à rejouer sur la plateforme —
+non promis tant que le cas n'a pas tourné.
+
 **Non couvert (honnêteté)** :
 
 - « impact métier » = nombre de dépassements du SLA de décision (compteur en base) —
@@ -216,8 +232,9 @@ vérifié en base à la ligne près (278 == 278, delta contrôlé 0 == 0).
   la branche « écart stable = perte » est codée (fermeture non atteinte à l'échéance)
   mais jamais déclenchée en campagne ; documenté tel quel, pas supposé ;
 - seuils **fixes** (extension adaptative non implémentée ; le sujet ne l'exige pas) ;
-- pas de vue HTTP/Grafana du moteur — la CLI est le produit livré, l'extension est
-  différée (aucun rebuild nécessaire grâce à l'architecture « hors socle ») ;
+- la vue Grafana (`simul-pix-diagnostic`, 08/11) **affiche** le diagnostic mais ne
+  le **prouve** pas — la CLI reste le produit livré et la source de vérité (aucun
+  rebuild nécessaire grâce à l'architecture « hors socle ») ;
 - le moteur joue **au-dessus du socle** : il hérite de ses défauts — si une sonde
   ment tout en restant « fraîche », le garde-fou fraîcheur ne le voit pas (l'inverse,
   une sonde périmée, EST détectée). La vérification indépendante tp-kafka/tp-db reste
@@ -233,9 +250,14 @@ validés-tardifs/rejets-TTL, phrase métier, vérification `tp-db.sh`) ; preuve
 rejouable `scripts/impact-metier-proof.sh` + `scripts/lib/impact_report.py`
 (`preuves/phase7-impact-metier-2026-11-05/` : 6/6, moteur == sonde PG == SQL).
 
+**Implémentée (08/11/2026)** — **vue Grafana permanente du diagnostic** : dashboard
+provisionné `simul-pix-diagnostic` alimenté par l'exporteur
+`scripts/diagnostic-export.sh` (métrique `simulpix_diagnostic`) ; étiquette
+« État sain — aucun incident actif » quand le verdict est `healthy` ; cycle incident
+C-postgres-indispo capturé (`preuves/phase6-grafana-diagnostic-2026-11-08/`).
+La CLI reste la source de vérité.
+
 **Restées en réserve** :
 
 1. **Détection adaptative** : remplacer des seuils fixes par une estimation liée au
-   débit courant — une règle explicite, justifiée et évaluée suffit déjà au minimum ;
-2. **Vue HTTP / panneau Grafana** : le même module peut être exposé par service-health
-   ou rendu en dashboard (extension différée ; aucun rebuild nécessaire).
+   débit courant — une règle explicite, justifiée et évaluée suffit déjà au minimum.

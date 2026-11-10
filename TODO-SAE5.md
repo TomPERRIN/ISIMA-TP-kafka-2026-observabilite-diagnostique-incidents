@@ -101,7 +101,18 @@ Construire une **lecture d'incident** qui distingue **au moins 3 situations** :
 
 ### 3.3 Organisation d'équipe
 
-- ⬜ Former un groupe de 4 minimum, répartir les rôles (analyse, développement, essais, documentation), désigner un responsable d'intégration, prévoir un point de synchronisation par séance.
+✅ Réparti le 05/11/2026 (groupe de 4, conforme à `TP/SAé/README.md` : analyse, développement, essais, documentation ; un responsable d'intégration ; un point de synchronisation à chaque séance).
+
+| Membre | Rôle | Contributions |
+|---|---|---|
+| TomPERRIN | Développement + **responsable intégration** | moteur de diagnostic (`diagnose.sh`, `diagnose_engine.py` + tests), campagne automatisée phases 4-5, guide praticien, note de conception, impact métier ; relit et fusionne les PR, garantit `main` exécutable |
+| Ayel04 | Analyse | états des lieux (météo, dashboards, métriques restantes), inventaire d'observabilité (`metriques-observabilite.md`), matrice symptômes/causes (v1) |
+| Madiak5 | Documentation + revue | vérification croisée de l'inventaire contre les dashboards provisionnés (§2.6, 05/11), organisation d'équipe (cette section), README racine, relecture des livrables en « lecteur externe » (guide, note de conception), rejeu du protocole d'essai |
+| Ania | Essais indépendants + documentation | rejeu de la campagne (preuve « protocole exécutable par un autre groupe »), test du guide praticien pendant un incident, vérification de la fraîcheur des sondes |
+
+- **Responsable d'intégration** : TomPERRIN (PR #1, fusion des branches, `main` exécutable).
+- **Point de synchronisation** : à chaque séance (bilan fait/reste, répartition des prochaines tâches, push de la branche de chacun).
+- Les contributions non-code (revues, vérifications, rédaction) sont documentées dans ce TODO et les messages de commit, conformément aux attendus (« Rendez visibles les contributions individuelles »).
 
 ---
 
@@ -280,6 +291,14 @@ Archivée dans `preuves/phase2-recensement/reference-nominale-2026-11-03/` (run-
   - distinguer **automatiquement** au moins **2 causes plausibles d'un même symptôme** ;
   - si les données ne permettent pas de trancher, afficher un état **« indéterminé »** + la vérification suivante à mener.
 
+  - ✅ **v2 (09/11/2026) — deux symptômes distincts** : le sujet demande aussi de séparer
+    la **file d'attente qui grossit** (famille `consumer_backlog`) du **paiement traité
+    trop lentement** (famille `slow_processing`), avec l'analyse causale : **un traitement
+    long engendre une attente grossissante**, mais les causes possibles d'un traitement
+    lent (persistance lente, délai SLA trop court, retard amont) sont tranchées
+    automatiquement par l'état de la file (`matrice v2` +
+    `scripts/lib/test_diagnose_engine.py`, section « symptôme 2 »).
+
 - ⬜ Prévoir une **vérification indépendante** de la cause (ex. croiser offsets/API Kafka avec le contenu réel de PostgreSQL, pas seulement un graphique).
 
 ---
@@ -292,6 +311,14 @@ Archivée dans `preuves/phase2-recensement/reference-nominale-2026-11-03/` (run-
   - **(A) retard consommateur** : `./scripts/run-scenario.sh consumer_lag` ou `network-perturb.sh` sur un service ;
   - **(B) réplication dégradée** : `./scripts/run-scenario.sh replication_lag` (arrêt temporaire d'un broker) ;
   - **(C) incident PostgreSQL** : dégradation (délais de persistance) ou indisponibilité, p.ex. `SIMULPIX_PERSIST_*_DELAY_MS` ou arrêt du conteneur `postgres`.
+  - ✅ **(D) traitement lent — symptôme 2 (v2, 09/11/2026)** : cas `D-traitement-lent` dans
+    `scripts/diagnostic-campaign.sh` (famille attendue `slow_processing`) — scénario
+    **nominal lancé via l'UI** (`POST /control`, `action=run_scenario`,
+    `decision_sla_seconds=3`, minimum 3) + perturbation réseau `kafka_latency`
+    (250 ms/requête sur `pix-decision-engine`) injectée au milieu du flux :
+    traitement long à **file vide** ; si la file grossit ensuite → `consumer_backlog`
+    (lien causal : un traitement long engendre une attente grossissante). Le moteur
+    lit le SLA de l'UI (`decision_sla_seconds`) dans `/health/details?decision_sla_seconds=3`.
 - ⬜ Ajouter un essai **NOMINAL témoin** (contrôle des faux positifs).
 - ⬜ Automatiser l'enchaînement : scénarios + collecte des relevés (commandes + sorties), **rejouable par un autre groupe**.
 - ⬜ Mesurer pour tout diagnostic déterminé :

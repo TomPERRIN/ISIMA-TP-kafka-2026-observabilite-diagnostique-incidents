@@ -67,7 +67,7 @@ Table de lecture :
 
 | Bloc | Ce qu'il dit | Réflexe |
 |---|---|---|
-| `état` | un des 5 verdicts (§3) | si ≠ `healthy` : §4 |
+| `état` | un des 6 verdicts (§3) | si ≠ `healthy` : §4 |
 | `cause` + probabilité/criticité | la cause nommée UNIQUEMENT si l'état n'est pas `indeterminate` | `criticité Critique/Élevée` = examiner en premier |
 | `impact` | combien de Pix ont dépassé le SLA de décision (10 s) : total, `+delta` depuis la lecture précédente, répartition (acceptés en retard / rejets TTL) | chiffre FACTUEL visible dès que les compteurs sont lisibles, même sur `indeterminate` ; à confirmer en base : `tp-db.sh` (colonnes `decision_within_sla`) — **≠ incident système** (§5.4) |
 | `preuves (double lecture)` | les signaux de chaque source (kafka / postgres / platform) | vérifier sur les sources, pas sur un dashboard |
@@ -77,15 +77,23 @@ Table de lecture :
 
 ---
 
-## 3. Les 5 verdicts et les causes nommées par famille
+## 3. Les 6 verdicts et les causes nommées par famille
 
 | Verdict (famille) | Causes nommées possibles | Cause critique en priorité | Vérification indépendante |
 |---|---|---|---|
 | `healthy` | `upstream_stopped_normal` (fin de scénario, PAS un incident) | — | `./scripts/tp-db.sh` (base figée expliquée) |
-| `consumer_backlog` (A) | `reader_backlog`, `upstream_backlog_sla`, `sla_config` | — | `./scripts/tp-kafka.sh` |
+| `consumer_backlog` (A) | `reader_backlog`, `upstream_backlog_sla` | — | `./scripts/tp-kafka.sh` |
+| `slow_processing` (D) | `sla_config` (délai SLA trop court : configuration, pas un incident) | — | comparer `avg_validation_latency_ms` au `decision_sla_seconds` du scénario |
 | `kafka_replication` (B) | `broker_down` (Faible prob./criticité Élevée), `replication_catchup` (Élevée/Faible) | `broker_down` d'abord | `./scripts/tp-kafka.sh` (+ relire ~30 s) |
 | `persistence` (C) | `postgres_unavailable` (Moyenne/**Critique**), `persister_slow` (Moyenne/Élevée) | `postgres_unavailable` en premier | `./scripts/tp-db.sh` |
 | `indeterminate` | raison cataloguée, cf. §6 | — | suivre `next_check` |
+
+Deux symptômes à ne pas confondre (matrice v2) : la **file d'attente qui grossit**
+(famille A) et le **paiement traité trop lentement** (famille D) sont des verdicts
+distincts. Un traitement long engendre une attente grossissante, mais les causes d'un
+traitement lent sont tranchées par l'état de la file : file qui grossit → l'amont
+(A) ; file vide + écart de persistance qui grossit → la persistance (C) ; file vide +
+écart stable + latence > SLA × 80 % sur 2 lectures → le délai SLA trop court (D).
 
 Règle d'examen de la matrice : **la cause la plus critique d'abord si sa vérification
 est rapide** (tp-kafka/tp-db = instantanés), puis confirmer la cause la plus probable.
@@ -114,7 +122,13 @@ seul ; jamais sur un offset Kafka seul (toujours lire PostgreSQL).
 
 ### 5.1 Retard de consommateur (situation A) — preuves `preuves/phase5-…/A-draine/`
 
-Injecté par : `./scripts/run-scenario.sh consumer_lag 600 20` (décision 400 ms à 20/s).
+Injecté par : `./scripts/run-scenario.sh consumer_lag 600 20` (décision 350 ms à 20/s).
+
+> Le lancement d'un scénario **recrée service-health** (`run-scenario.sh` l'inclut dans
+> sa recréation de conteneurs) : `/health/details` devient injoignable quelques secondes
+> et un `--watch` déjà lancé **s'arrête** (le script quitte au lieu de réessayer).
+> Lancer le `--watch` **après** la fin de la recréation des conteneurs, ou relancer
+> `--watch` si le message « injoignable » apparaît au moment de l'injection.
 
 Ce qui se passe (relevé réel, cadence 11 s) :
 
@@ -246,8 +260,18 @@ par `cross-check.sh`) :
 ## 8. Rejouer les essais (campagne + vérification croisée)
 
 ```bash
+# UNE commande, UN terminal : exporteur Grafana (frise en direct) + campagne —
+# le dashboard s'alimente pendant que les incidents tournent ; --pause attend
+# une Entrée entre les cas pour observer
+./scripts/demo-diagnostic.sh                # options transmises : --quick, --cases…
+
 # phase 4 — incidents + témoin nominal, mesures de garantie (SYNTHESE.md à la fin)
-./scripts/diagnostic-campaign.sh          # ~30 min ; preuves dans preuves/phase4-…/
+./scripts/diagnostic-campaign.sh          # ~35 min ; preuves dans preuves/phase4-…/
+
+# cas D seul — traitement lent (slow_processing) :
+# scénario nominal lancé via l'UI (decision_sla_seconds=3) + perturbation
+# réseau kafka_latency sur pix-decision-engine -> traitement long à file vide
+./scripts/diagnostic-campaign.sh --cases D-traitement-lent
 
 # phase 5 — croisement Kafka/PG + démonstration de non-confusion (4 cas)
 ./scripts/cross-check.sh                  # ~25 min ; preuves dans preuves/phase5-…/
@@ -270,7 +294,7 @@ sonde PG == SQL direct : 278==278==278 ; delta contrôlé 0 == 0). Protocoles co
 
 | Symptôme | Cause probable | Action |
 |---|---|---|
-| `diagnose: /health/details injoignable` | plateforme éteinte | `./start.sh`, attendre service-health |
+| `diagnose: /health/details injoignable` | plateforme éteinte, **ou** conteneurs recréés par un lancement de scénario (service-health recréé quelques secondes) | si éteinte : `./start.sh`, attendre service-health ; si pendant un lancement de scénario : attendre quelques secondes et relancer `--watch` |
 | `indeterminate/needs_second_sample` persistant | cadence < 10 s | `--watch 15` au lieu d'enchaîner des ponctuels |
 | `indeterminate/probes_stale` | collecteur/service-health accroché | `./stop.sh && ./start.sh`, puis `--reset` |
 | lag `=1` isolé en nominal | rattrapage éclair | ne pas conclure : 0-1 en nominal est normal, le moteur l'ignore |

@@ -1,12 +1,9 @@
-Warning: truncated output (original token count: 4242)
-Total output lines: 416
-
 # Simul-Pix
 
 Plateforme pédagogique locale autour de Kafka, construite autour d'un pipeline de paiements Pix simulés.
 ## SAÉ 5 — Observabilité et diagnostic d'incidents
 >
-> Ce dépôt est dérivé du socle pédagogique **simul-pix**. Il contient la réalisation
+> Ce dépôt est dérivé du socle pédagogique [`simul-pix`](https://github.com/wiguyot/ISIMA-TP-kafka-2026). Il contient la réalisation
 > du sujet 5 : aider un opérateur à passer d'un symptôme visible à une cause vérifiée,
 > en croisant les signaux déjà exposés par la météo, Grafana et les sondes
 > Kafka/PostgreSQL, sans ajouter de nouvelle sonde.
@@ -16,12 +13,17 @@ Plateforme pédagogique locale autour de Kafka, construite autour d'un pipeline 
 > par une matrice validée sur incidents injectés : bonne cause retenue sur 100 % des
 > cas connus, état « indéterminé » + vérification suivante sinon.
 >
+> Mesures de la campagne du 05/11/2026 (`preuves/phase4-campagne-2026-11-05/`) :
+> **justesse 4/4** sur incidents connus, **0 faux positif** sur 5 témoins nominaux,
+> **délai de détection ≤ 25 s**.
+>
 > **Produit** : la commande [`./scripts/diagnose.sh`](scripts/diagnose.sh), appuyée sur
-> le moteur `scripts/lib/diagnose_engine.py` et 32 tests unitaires.
+> le moteur `scripts/lib/diagnose_engine.py` et 37 tests unitaires.
 >
 > **Documentation** :
 > - guide praticien : [`docs/operations/guide-diagnostic.md`](docs/operations/guide-diagnostic.md) ;
 > - note de conception : [`docs/architecture/diagnostic-engine-design.md`](docs/architecture/diagnostic-engine-design.md) ;
+> - matrice de diagnostic : `travail/notes/matrice-symptomes-causes.md` ;
 > - preuves rejouables : [`preuves/`](preuves/).
 >
 > **Lancer la plateforme et rejouer les essais** :
@@ -30,13 +32,21 @@ Plateforme pédagogique locale autour de Kafka, construite autour d'un pipeline 
 > ./scripts/diagnose.sh              # diagnostic ponctuel
 > ./scripts/diagnose.sh --watch 15   # suivi en continu
 > ./scripts/diagnostic-campaign.sh   # campagne phase 4 : incidents + témoins
+> ./scripts/diagnostic-campaign.sh --quick   # version réduite (2 témoins)
 > ./scripts/cross-check.sh           # vérification croisée Kafka + PostgreSQL
 > ./scripts/impact-metier-proof.sh   # preuve impact métier
+> ./scripts/demo-diagnostic.sh       # démo en une commande : frise Grafana + campagne
+> ./scripts/demo-angles-morts.sh     # les 9 angles morts du diagnostic, sans Docker
 > ./stop.sh
 > ```
 > Les essais live nécessitent Docker + Compose et environ 4 Go de RAM. Les seuils,
 > les résultats mesurés et les limites sont détaillés dans le guide et la note de
 > conception.
+>
+> Protocoles détaillés : campagne (`travail/notes/protocole-campagne-phase4.md`) et
+> vérification croisée (`travail/notes/protocole-phase5-croisee.md`). Les scénarios
+> du socle se lancent comme décrit dans « Pilotage des scénarios » ci-dessous
+> (`./scripts/run-scenario.sh nominal 100 10`).
 
 ## Parcours étudiant
 
@@ -351,6 +361,8 @@ Les anciennes fiches d'atelier sont conservées dans [TP/pour-aller-plus-loin/](
 
 Ces références ne sont pas nécessaires pour réaliser les activités. Leur index est dans [docs/README.md](docs/README.md) ; consultez-les lorsqu'un TP ou un projet en a besoin.
 
+Les données `.xlsx` de [`docs/analyses-techniques/`](docs/analyses-techniques/) sont les résultats archivés des expériences exactly-once, stop et sémantique — générées par les scripts `scripts/run_exactly_once_*.py`, `scripts/run_pix_validation_experiments.py` et `scripts/run_semantics_campaign.py` (conservés pour rejouer les mesures).
+
 ## Perturbations réseau
 
 Profils actuellement supportés :
@@ -401,14 +413,23 @@ Le collecteur InfluxDB écrit aussi :
 Tests unitaires légers sans Docker :
 
 ```sh
-python3 -m unittest discover -s tests
+python3 -m unittest discover -s tests                     # 6 tests pipeline
+cd scripts/lib && python3 -m unittest test_diagnose_engine  # 37 tests moteur
+cd scripts/lib && python3 -m unittest test_campaign_report  # 10 tests rapport
+cd scripts/lib && python3 -m unittest test_blind_spots      # 22 tests angles morts
 ```
 
-Ils vérifient en particulier :
+La suite pipeline vérifie en particulier :
 
 - la validation métier de la chaîne `pix-validator -> pix-decision-engine` ;
 - la présence du commit manuel Kafka dans les configs consommateur ;
 - les métadonnées de rejeu et d'idempotence sur les rejets.
+
+Les suites du moteur vérifient en particulier :
+
+- la matrice de diagnostic (chaque ligne × 2 causes, jamais de conclusion sur sondes périmées) ;
+- les 9 angles morts (chaque cas produit le verdict attendu — si un angle mort se ferme, le test alerte) ;
+- l'export Grafana du diagnostic et des angles morts (14 lignes, protocole de l'exporteur).
 
 Vérification d'intégration Docker :
 

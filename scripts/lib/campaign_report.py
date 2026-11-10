@@ -20,7 +20,7 @@ import os
 import sys
 from typing import Any, Dict, List, Optional, Tuple
 
-INCIDENT_FAMILIES = ("consumer_backlog", "kafka_replication", "persistence")
+INCIDENT_FAMILIES = ("consumer_backlog", "slow_processing", "kafka_replication", "persistence")
 
 #: famille attendue par cas (préfixe du nom de répertoire)
 EXPECTED_BY_PREFIX: List[Tuple[str, Optional[str]]] = [
@@ -29,6 +29,7 @@ EXPECTED_BY_PREFIX: List[Tuple[str, Optional[str]]] = [
     ("B-replication", "kafka_replication"),
     ("C-postgres-indispo", "persistence"),
     ("C-postgres-degrade", "persistence"),
+    ("D-traitement-lent", "slow_processing"),
 ]
 
 EVENT_DELAY_BASE = "fault_injected"   # sinon scenario_ready
@@ -39,6 +40,46 @@ def expected_family(case_name: str) -> Optional[str]:
         if case_name.startswith(prefix):
             return family
     return None
+
+
+def coverage(analyses: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Couverture « problèmes étudiés » : chaque famille d'incident doit avoir
+    été VUE dans les verdicts d'un cas qui l'attend — pas seulement lancée.
+
+    Un run partiel (``--cases``) ne doit pas ressembler à une campagne complète :
+    la synthèse affiche ce qui manque et ``complete`` passe à False. Le témoin
+    (0 faux positif) et l'indéterminé explicite sont rapportés en complément.
+    """
+    per_family: Dict[str, List[Dict[str, Any]]] = {}
+    for a in analyses:
+        fam = a.get("expected_family")
+        if not fam:
+            continue
+        counts = a.get("verdict_counts") or {}
+        per_family.setdefault(fam, []).append({
+            "case": a["case"],
+            "vue": fam in counts,
+            "verdicts": counts.get(fam, 0),
+        })
+    rows = []
+    for fam in INCIDENT_FAMILIES:
+        attendus = per_family.get(fam) or []
+        rows.append({
+            "family": fam,
+            "cases": attendus,
+            "exerciced": any(e["vue"] for e in attendus),
+        })
+    ok = sum(1 for r in rows if r["exerciced"])
+    witnesses = [a for a in analyses if a.get("is_witness")]
+    return {
+        "families": rows,
+        "families_exerciced": "%d/%d" % (ok, len(INCIDENT_FAMILIES)),
+        "complete": ok == len(INCIDENT_FAMILIES),
+        "temoin_zero_fp": any(a.get("false_positives", 0) == 0
+                              and a.get("reachable", 0) > 0 for a in witnesses),
+        "indetermine_explicite": any("indeterminate" in (a.get("verdict_counts") or {})
+                                     for a in analyses),
+    }
 
 
 def load_jsonl(path: str) -> List[Dict[str, Any]]:
@@ -154,6 +195,7 @@ def write_reports(root: str, analyses: List[Dict[str, Any]]) -> None:
     witnesses = [a for a in analyses if a.get("is_witness")]
     delays = [a["detection_delay_s"] for a in analyses
               if not a.get("is_witness") and a.get("detection_delay_s") is not None]
+    cov = coverage(analyses)
 
     summary = {
         "justesse": "%d/%d" % (families_ok, incidents_total),
@@ -168,6 +210,8 @@ def write_reports(root: str, analyses: List[Dict[str, Any]]) -> None:
         "critere1_100_pourcent": families_ok == incidents_total,
         "critere3_delai_30s": all(d is not None and d <= 30 for d in delays) if delays else False,
         "critere4_zero_fp": fp_total == 0,
+        "couverture": cov,
+        "couverture_familles": cov["complete"],
         "cases": analyses,
     }
     with open(os.path.join(root, "campaign-summary.json"), "w", encoding="utf-8") as handle:
@@ -177,7 +221,8 @@ def write_reports(root: str, analyses: List[Dict[str, Any]]) -> None:
     lines.append("# Campagne d'incidents provoqués — synthèse\n")
     lines.append("| Critère | Résultat |")
     lines.append("|---|---|")
-    lines.append("| #1 justesse (3 familles) | %s |" % summary["justesse"])
+    lines.append("| #1 justesse (%d familles) | %s |" % (len(INCIDENT_FAMILIES), summary["justesse"]))
+    lines.append("| Couverture familles (problèmes étudiés) | %s |" % cov["families_exerciced"])
     lines.append("| #4 faux positifs (témoin) | %s |" % summary["faux_positifs_temoins"])
     lines.append("| #3 délai max | %s |" % summary["delai_detection"]["max_s"])
     lines.append("")
@@ -200,6 +245,23 @@ def write_reports(root: str, analyses: List[Dict[str, Any]]) -> None:
         if a.get("indeterminate_reasons"):
             lines.append("- %s : états indéterminés = %s" % (
                 a["case"], ", ".join(a["indeterminate_reasons"])))
+
+    lines.append("")
+    lines.append("## Couverture des problèmes étudiés\n")
+    lines.append("| Famille | Cas qui l'attendent | Statut |")
+    lines.append("|---|---|---|")
+    for row in cov["families"]:
+        cases_txt = ", ".join(
+            "%s (%s×%d)" % (e["case"], row["family"], e["verdicts"])
+            if e["vue"] else "%s (famille absente des verdicts)" % e["case"]
+            for e in row["cases"]) or "aucun cas attendu"
+        lines.append("| `%s` | %s | %s |" % (
+            row["family"], cases_txt, "✅" if row["exerciced"] else "❌"))
+    lines.append("")
+    lines.append("- témoin nominal (0 faux positif) : %s" % (
+        "✅" if cov["temoin_zero_fp"] else "❌ (aucun témoin exploitable)"))
+    lines.append("- verdicts indéterminés explicites : %s" % (
+        "✅" if cov["indetermine_explicite"] else "— (aucun)"))
     with open(os.path.join(root, "SYNTHESE.md"), "w", encoding="utf-8") as handle:
         handle.write("\n".join(lines) + "\n")
 

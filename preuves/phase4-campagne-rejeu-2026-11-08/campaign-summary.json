@@ -1,0 +1,196 @@
+{
+ "justesse": "4/4",
+ "faux_positifs_temoins": "0 (sur 5 témoins, 30 échantillons)",
+ "delai_detection": {
+  "par_cas": {
+   "A-retard-lecture": 15.0,
+   "B-replication": 20.0,
+   "C-postgres-degrade": 16.0,
+   "C-postgres-indispo": 5.0
+  },
+  "max_s": 20.0,
+  "garantie": "<= 30 s"
+ },
+ "critere1_100_pourcent": true,
+ "critere3_delai_30s": true,
+ "critere4_zero_fp": true,
+ "cases": [
+  {
+   "case": "A-retard-lecture",
+   "expected_family": "consumer_backlog",
+   "is_witness": false,
+   "samples": 9,
+   "reachable": 9,
+   "unreachable": 0,
+   "verdict_counts": {
+    "consumer_backlog": 8,
+    "indeterminate": 1
+   },
+   "indeterminate_reasons": [
+    "needs_second_sample"
+   ],
+   "cli_failed": 0,
+   "conclusive": true,
+   "needs_second_sample_before": 1,
+   "cause": "reader_backlog",
+   "cause_label": "Retard de lecture applicatif (les applications qui lisent les topics sont en retard)",
+   "probability": "Élevée",
+   "criticality": "Moyenne",
+   "detection_delay_s": 15.0,
+   "detected_at": 1794150248.0,
+   "pass": true
+  },
+  {
+   "case": "B-replication",
+   "expected_family": "kafka_replication",
+   "is_witness": false,
+   "samples": 9,
+   "reachable": 9,
+   "unreachable": 0,
+   "verdict_counts": {
+    "healthy": 7,
+    "kafka_replication": 2
+   },
+   "indeterminate_reasons": [],
+   "cli_failed": 0,
+   "conclusive": true,
+   "needs_second_sample_before": 0,
+   "cause": "replication_catchup",
+   "cause_label": "Retard de copie entre brokers (bénin, passager : se résorbe seul)",
+   "probability": "Élevée",
+   "criticality": "Faible",
+   "detection_delay_s": 20.0,
+   "detected_at": 1794150504.0,
+   "pass": true
+  },
+  {
+   "case": "C-postgres-degrade",
+   "expected_family": "persistence",
+   "is_witness": false,
+   "samples": 9,
+   "reachable": 9,
+   "unreachable": 0,
+   "verdict_counts": {
+    "healthy": 6,
+    "indeterminate": 1,
+    "persistence": 2
+   },
+   "indeterminate_reasons": [
+    "needs_second_sample"
+   ],
+   "cli_failed": 0,
+   "conclusive": true,
+   "needs_second_sample_before": 1,
+   "cause": "persister_slow",
+   "cause_label": "PostgreSQL ne suit plus le flux (persister lent / base lente)",
+   "probability": "Moyenne",
+   "criticality": "Élevée",
+   "detection_delay_s": 16.0,
+   "detected_at": 1794150981.0,
+   "pass": true
+  },
+  {
+   "case": "C-postgres-indispo",
+   "expected_family": "persistence",
+   "is_witness": false,
+   "samples": 9,
+   "reachable": 9,
+   "unreachable": 0,
+   "verdict_counts": {
+    "healthy": 5,
+    "persistence": 4
+   },
+   "indeterminate_reasons": [],
+   "cli_failed": 0,
+   "conclusive": true,
+   "needs_second_sample_before": 0,
+   "cause": "service_down:postgres",
+   "cause_label": "Le service postgres ne répond plus (sonde en échec)",
+   "probability": "Faible",
+   "criticality": "Critique",
+   "detection_delay_s": 5.0,
+   "detected_at": 1794150747.0,
+   "pass": true
+  },
+  {
+   "case": "temoin-1",
+   "expected_family": null,
+   "is_witness": true,
+   "samples": 6,
+   "reachable": 6,
+   "unreachable": 0,
+   "verdict_counts": {
+    "healthy": 6
+   },
+   "indeterminate_reasons": [],
+   "cli_failed": 0,
+   "false_positives": 0,
+   "pass": true,
+   "fp_verdicts": []
+  },
+  {
+   "case": "temoin-2",
+   "expected_family": null,
+   "is_witness": true,
+   "samples": 6,
+   "reachable": 6,
+   "unreachable": 0,
+   "verdict_counts": {
+    "healthy": 6
+   },
+   "indeterminate_reasons": [],
+   "cli_failed": 0,
+   "false_positives": 0,
+   "pass": true,
+   "fp_verdicts": []
+  },
+  {
+   "case": "temoin-3",
+   "expected_family": null,
+   "is_witness": true,
+   "samples": 6,
+   "reachable": 6,
+   "unreachable": 0,
+   "verdict_counts": {
+    "healthy": 6
+   },
+   "indeterminate_reasons": [],
+   "cli_failed": 0,
+   "false_positives": 0,
+   "pass": true,
+   "fp_verdicts": []
+  },
+  {
+   "case": "temoin-4",
+   "expected_family": null,
+   "is_witness": true,
+   "samples": 6,
+   "reachable": 6,
+   "unreachable": 0,
+   "verdict_counts": {
+    "healthy": 6
+   },
+   "indeterminate_reasons": [],
+   "cli_failed": 0,
+   "false_positives": 0,
+   "pass": true,
+   "fp_verdicts": []
+  },
+  {
+   "case": "temoin-5",
+   "expected_family": null,
+   "is_witness": true,
+   "samples": 6,
+   "reachable": 6,
+   "unreachable": 0,
+   "verdict_counts": {
+    "healthy": 6
+   },
+   "indeterminate_reasons": [],
+   "cli_failed": 0,
+   "false_positives": 0,
+   "pass": true,
+   "fp_verdicts": []
+  }
+ ]
+}

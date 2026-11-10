@@ -1,6 +1,10 @@
 #!/bin/sh
 set -eu
 
+# Arrêt SIMPLE de la plateforme : `docker compose stop` (les conteneurs et les
+# volumes sont conservés, données incluses). Ne pas confondre avec ./stop.sh
+# (racine) qui PURGE : conteneurs + volumes + toutes les données persistées.
+
 # Se placer à la racine du dépôt, quel que soit le répertoire d'appel.
 cd "$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 

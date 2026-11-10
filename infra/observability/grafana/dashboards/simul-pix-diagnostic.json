@@ -1,0 +1,665 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "refresh": "15s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": [
+    "simulpix",
+    "diagnostic",
+    "sae5",
+    "influxdb"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "title": "Simul-Pix - Diagnostic (SAÉ 5)",
+  "uid": "simulpix-diagnostic",
+  "version": 1,
+  "panels": [
+    {
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 100,
+      "options": {
+        "content": "Vue graphique du moteur de diagnostic SAÉ 5 (la matrice symptômes/causes automatique). La métrique `simulpix_diagnostic` est écrite par l'exporteur : `./scripts/diagnostic-export.sh --watch 15` (lancer pendant un incident, comme `diagnose.sh --watch 15`).\n\nLa CLI reste la source de vérité : le dashboard affiche, il ne prouve pas — toute conclusion d'incident se vérifie en direct avec `tp-kafka.sh` et `tp-db.sh`.",
+        "mode": "markdown"
+      },
+      "pluginVersion": "11.1.0",
+      "title": "",
+      "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "simulpix-influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "custom": {
+            "axisPlacement": "hidden",
+            "fillOpacity": 80,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineWidth": 1,
+            "spanNulls": false
+          },
+          "unit": "short",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "-1": {
+                  "text": "indéterminé (pas de conclusion)",
+                  "color": "purple",
+                  "index": 0
+                },
+                "0": {
+                  "text": "sain (aucune cause nommée)",
+                  "color": "green",
+                  "index": 1
+                },
+                "1": {
+                  "text": "retard consommateur (A)",
+                  "color": "orange",
+                  "index": 2
+                },
+                "2": {
+                  "text": "réplication dégradée (B)",
+                  "color": "yellow",
+                  "index": 3
+                },
+                "3": {
+                  "text": "persistance défaillante (C)",
+                  "color": "red",
+                  "index": 4
+                },
+                "4": {
+                  "text": "traitement lent (D)",
+                  "color": "blue",
+                  "index": 5
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "exporteur arrêté",
+                  "color": "text",
+                  "index": 6
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 16,
+        "x": 0,
+        "y": 3
+      },
+      "id": 1,
+      "options": {
+        "alignValue": "center",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "mergeValues": true,
+        "showValue": "never",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "simulpix-influxdb"
+          },
+          "query": "from(bucket: \"simulpix_observability\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"simulpix_diagnostic\")\n  |> filter(fn: (r) => r._field == \"state_code\")\n  |> group()\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> yield(name: \"last\")",
+          "refId": "A"
+        }
+      ],
+      "title": "Verdicts du diagnostic — histoire de l'incident",
+      "type": "state-timeline"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "simulpix-influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4.5,
+        "w": 8,
+        "x": 16,
+        "y": 3
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "Value",
+          "values": false
+        },
+        "textMode": "value",
+        "noValue": "exporteur arrêté"
+      },
+      "pluginVersion": "11.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "simulpix-influxdb"
+          },
+          "query": "from(bucket: \"simulpix_observability\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"simulpix_diagnostic\")\n  |> filter(fn: (r) => r._field == \"cause_label\")\n  |> group()\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> sort(columns: [\"_time\"])\n  |> last()\n  |> yield(name: \"last\")",
+          "refId": "A"
+        }
+      ],
+      "title": "Incident probable (ou état sain)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "simulpix-influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4.5,
+        "w": 4,
+        "x": 16,
+        "y": 7.5
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "Value",
+          "values": false
+        },
+        "textMode": "value",
+        "noValue": "—"
+      },
+      "pluginVersion": "11.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "simulpix-influxdb"
+          },
+          "query": "from(bucket: \"simulpix_observability\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"simulpix_diagnostic\")\n  |> filter(fn: (r) => r._field == \"probability\")\n  |> group()\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> sort(columns: [\"_time\"])\n  |> last()\n  |> yield(name: \"last\")",
+          "refId": "A"
+        }
+      ],
+      "title": "Probabilité",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "simulpix-influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4.5,
+        "w": 4,
+        "x": 20,
+        "y": 7.5
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "Value",
+          "values": false
+        },
+        "textMode": "value",
+        "noValue": "—"
+      },
+      "pluginVersion": "11.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "simulpix-influxdb"
+          },
+          "query": "from(bucket: \"simulpix_observability\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"simulpix_diagnostic\")\n  |> filter(fn: (r) => r._field == \"criticality\")\n  |> group()\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> sort(columns: [\"_time\"])\n  |> last()\n  |> yield(name: \"last\")",
+          "refId": "A"
+        }
+      ],
+      "title": "Criticité",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "simulpix-influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 75
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 19
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "simulpix-influxdb"
+          },
+          "query": "from(bucket: \"simulpix_observability\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"simulpix_diagnostic\")\n  |> filter(fn: (r) => r._field == \"payload_age_s\")\n  |> group()\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> yield(name: \"last\")",
+          "refId": "A"
+        }
+      ],
+      "title": "Fraîcheur — âge du payload au verdict (limite 75 s)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "simulpix-influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 75
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 19
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "simulpix-influxdb"
+          },
+          "query": "from(bucket: \"simulpix_observability\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"simulpix_diagnostic\")\n  |> filter(fn: (r) => r._field == \"replication_age_s\")\n  |> group()\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> yield(name: \"last\")",
+          "refId": "A"
+        }
+      ],
+      "title": "Fraîcheur — âge du snapshot réplication (limite 75 s)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "simulpix-influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 19
+      },
+      "id": 7,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "Value",
+          "values": false
+        },
+        "textMode": "value",
+        "noValue": "—"
+      },
+      "pluginVersion": "11.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "simulpix-influxdb"
+          },
+          "query": "from(bucket: \"simulpix_observability\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"simulpix_diagnostic\")\n  |> filter(fn: (r) => r._field == \"indeterminate_reason\")\n  |> group()\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> sort(columns: [\"_time\"])\n  |> last()\n  |> yield(name: \"last\")",
+          "refId": "A"
+        }
+      ],
+      "title": "Motif quand le verdict est « indéterminé »",
+      "type": "stat"
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      },
+      "id": 8,
+      "options": {
+        "content": "## Aide de lecture\n\n1. **La frise** montre la succession des verdicts : sain → indéterminé → incident (A/B/C/D) → sain.\n2. **Couleurs de la frise** : **vert** = sain · **violet** = indéterminé (pas de conclusion) · **orange** = retard consommateur (A) · **jaune** = réplication dégradée (B) · **rouge** = persistance défaillante (C) · **bleu** = traitement trop lent (D) · **gris** = exporteur arrêté.\n3. **Incident probable** donne la dernière cause nommée du moteur, avec sa probabilité et sa criticité (classement de la matrice).\n4. **Fraîcheur** : âge des mesures au moment du verdict — au-delà de la limite (75 s), le moteur ne conclut jamais (`probes_stale`).\n5. **Motif indéterminé** : quand la donnée ne permet pas de trancher, le moteur répond explicitement (`needs_second_sample`, `probes_stale`, …) — c'est une réponse, pas un silence.\n6. **Deux symptômes distincts** : la file qui grossit (A) n'est pas le traitement lent (D) — un traitement long engendre une attente grossissante, mais les causes d'un traitement lent sont tranchées quand la file est vide (persistance lente vs délai SLA trop court).\n\n⚠️ Rappel : le dashboard **affiche** le diagnostic, il ne le **prouve** pas — toute conclusion se vérifie en direct avec `tp-kafka.sh` (Kafka) et `tp-db.sh` (PostgreSQL), et la CLI `diagnose.sh` reste la source de vérité.",
+        "mode": "markdown"
+      },
+      "pluginVersion": "11.1.0",
+      "title": "",
+      "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "simulpix-influxdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "—": {
+                  "text": "",
+                  "index": 0
+                },
+                "aucune cause candidate": {
+                  "text": "",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "id": 10,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "Value",
+          "values": false
+        },
+        "textMode": "value",
+        "noValue": "exporteur arrêté"
+      },
+      "pluginVersion": "11.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "simulpix-influxdb"
+          },
+          "query": "from(bucket: \"simulpix_observability\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"simulpix_diagnostic\")\n  |> filter(fn: (r) => r._field == \"causes_list\")\n  |> group()\n  |> keep(columns: [\"_time\", \"_value\"])\n  |> sort(columns: [\"_time\"])\n  |> last()\n  |> yield(name: \"last\")",
+          "refId": "A"
+        }
+      ],
+      "title": "Causes examinées par le diagnostic (probables et écartées)",
+      "type": "stat"
+    }
+  ]
+}
