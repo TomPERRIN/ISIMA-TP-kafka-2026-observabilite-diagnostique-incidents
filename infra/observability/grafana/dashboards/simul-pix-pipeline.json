@@ -52,7 +52,7 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "Pix acceptés"
+                "value": "pix acceptes"
               }
             ]
           },
@@ -64,7 +64,7 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "Pix rejetés"
+                "value": "pix rejetes"
               }
             ]
           },
@@ -144,7 +144,7 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "Pix acceptés / s"
+                "value": "pix acceptes / s"
               }
             ]
           },
@@ -156,7 +156,7 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "Pix rejetés / s"
+                "value": "pix rejetes / s"
               }
             ]
           }
@@ -392,7 +392,7 @@
           "refId": "A"
         }
       ],
-      "description": "Backlog métier du pipeline : Pix émis sur le topic raw moins la somme des Pix acceptés et rejetés visibles.",
+      "description": "Backlog metier du pipeline : Pix emis sur le topic raw moins la somme des Pix acceptes et rejetes visibles.",
       "title": "Longueur de la file d'attente",
       "type": "timeseries"
     },
