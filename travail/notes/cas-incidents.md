@@ -51,6 +51,8 @@ pas lecture (règle de la matrice, ligne 1).
 - **Règle codée, jamais déclenchée en campagne** : B1 (`broker_down`).
 - **Angles morts à assumer** : B3, B4, C3, C4 — pas de cause nommée. À lister tel quel
   dans le registre des risques (§5) et dans la conclusion du rendu (limites honnêtes).
+  **Démontrés mécaniquement** par `./scripts/demo-angles-morts.sh` : chaque cas est
+  simulé (payloads synthétiques frais) et le verdict du vrai moteur est affiché.
 
 ## 2. Les cas à ne pas confondre
 
@@ -123,6 +125,31 @@ solution garantit de ce qu'elle ne garantit pas.
 - offset non initialisé ≠ retard (colonne « lecture » de `tp-kafka.sh`) ;
 - verdict `degraded` de la météo trop grossier : un service transversal down n'est pas un
   incident pipeline (témoin `service_down_transversal`).
+
+Ces angles morts ne sont pas seulement listés : ils sont **démontrés mécaniquement** par
+`./scripts/demo-angles-morts.sh` — chaque cas est simulé par des payloads `/health/details`
+synthétiques (sondes FRAÎCHES) passés au vrai moteur, qui affiche ce qu'il répond :
+
+| Cas simulé | Verdict du moteur | Limite démontrée |
+|---|---|---|
+| B4a contrôleur perdu sans URP | `healthy` | invisible : sans URP, aucune règle ne regarde le contrôleur |
+| B4b contrôleur perdu avec URP | `broker_down` | couvert — seulement parce qu'URP l'accompagne |
+| B3 rééquilibrage (URP 3→0) | `replication_catchup` | cause fine non nommée (même cause générique que la copie lente) |
+| C3a PG saturé léger | `healthy` | invisible : les connexions actives ne sont pas remontées |
+| C3b PG saturé fort | `persister_slow` | cause voisine, pas « saturation » |
+| C4a écriture échouée silencieuse | `contradictory_signals` | refus explicite mais cause non nommée |
+| C4b sonde qui ment, fraîche | `healthy` | **LA limite** : le garde-fou fraîcheur ne voit que le PÉRIMÉ, jamais le mensonge |
+| A0 offset non initialisé | `healthy` | lecture absente = invisible (0 lag lu quand la valeur manque) |
+| T0 service transversal down | `service_down_transversal` | témoin sans incident pipeline (assumé) |
+
+Le harnais ne modifie pas le moteur et fonctionne **sans Docker** (pur Python) —
+rejouable tel quel en soutenance. Protégé par `scripts/lib/test_blind_spots.py` :
+si un angle mort se ferme (le moteur évolue), les tests lèvent l'alerte.
+
+Variante « vue » : `./scripts/demo-angles-morts.sh --export` pousse les 14 états
+simulés sur la frise Grafana (métrique `simulpix_diagnostic`, protocole de
+l'exporteur réutilisé, dashboard NON modifié — hold 5 s entre deux états pour
+que chaque segment reste lisible) ; `--print` affiche les lignes sans envoyer.
 
 **Garantit / ne garantit pas :** la garantie mesurée (justesse 4/4, délai max 25 s,
 0 faux positif) porte sur les **5 cas prouvés du §1** (A2, A4, B2, C1, C2). Le détail
