@@ -278,13 +278,12 @@ Archivée dans `preuves/phase2-recensement/reference-nominale-2026-11-03/` (run-
 
 **Objectif : définir la matrice symptôme/cause/vérification et concevoir l'apport concret (livrables de preuve attendus).**
 
-- ⬜ Pour chaque famille d'incident (A, B, C), définir : **symptômes attendus**, **hypothèses de cause possibles**, **vérification suivante**.
-- ⬜ Construire la **MATRICE « symptôme / cause probable / vérification »** (livrable de preuve attendu).
-- ⬜ Concevoir l'apport concret (au moins **un** parmi) :
-  - une métrique dérivée ;
-  - une alerte ;
-  - une vue (dashboard/HTTP) ;
-  - une commande de diagnostic.
+- ✅ Pour chaque famille d'incident (A, B, C — et D v2), définir : **symptômes attendus**, **hypothèses de cause possibles**, **vérification suivante** → [`travail/notes/matrice-symptomes-causes.md`](travail/notes/matrice-symptomes-causes.md), [`travail/notes/cas-incidents.md`](travail/notes/cas-incidents.md), formalisation → [`docs/architecture/analyse-theorique-diagnostic.md`](docs/architecture/analyse-theorique-diagnostic.md) §3.
+- ✅ Construire la **MATRICE « symptôme / cause probable / vérification »** (livrable de preuve attendu) — 5 lignes, chaque symptôme oppose 2 causes plausibles → [`travail/notes/matrice-symptomes-causes.md`](travail/notes/matrice-symptomes-causes.md).
+- ✅ Concevoir l'apport concret (au moins **un** parmi) — **trois des quatre livrés** :
+  - une métrique dérivée : `estimated_oldest_lag_seconds` (ratio lag/profondeur) + métrique `simulpix_diagnostic` de l'exporteur Grafana ;
+  - une vue (dashboard/HTTP) : dashboard permanent [`simul-pix-diagnostic`](infra/observability/grafana/dashboards/) alimenté par `scripts/diagnostic-export.sh` ;
+  - une commande de diagnostic : `scripts/diagnose.sh` (CLI, source de vérité).
 
   Exigences du minimum :
   - couvrir les situations **A, B et C** (dont une dégradation **OU** une indisponibilité PostgreSQL) ;
@@ -299,7 +298,7 @@ Archivée dans `preuves/phase2-recensement/reference-nominale-2026-11-03/` (run-
     automatiquement par l'état de la file (`matrice v2` +
     `scripts/lib/test_diagnose_engine.py`, section « symptôme 2 »).
 
-- ⬜ Prévoir une **vérification indépendante** de la cause (ex. croiser offsets/API Kafka avec le contenu réel de PostgreSQL, pas seulement un graphique).
+- ✅ Prévoir une **vérification indépendante** de la cause : `tp-kafka.sh` / `tp-db.sh` imprimées dans chaque verdict du moteur + rejeu indépendant de la campagne ([`travail/notes/relecture-guide-praticien.md`](travail/notes/relecture-guide-praticien.md)).
 
 ---
 
@@ -307,10 +306,12 @@ Archivée dans `preuves/phase2-recensement/reference-nominale-2026-11-03/` (run-
 
 **Objectif : scripter les incidents + le témoin, et mesurer les critères de la garantie.**
 
-- ⬜ **Scripter l'injection des 3 incidents** :
-  - **(A) retard consommateur** : `./scripts/run-scenario.sh consumer_lag` ou `network-perturb.sh` sur un service ;
-  - **(B) réplication dégradée** : `./scripts/run-scenario.sh replication_lag` (arrêt temporaire d'un broker) ;
-  - **(C) incident PostgreSQL** : dégradation (délais de persistance) ou indisponibilité, p.ex. `SIMULPIX_PERSIST_*_DELAY_MS` ou arrêt du conteneur `postgres`.
+- ✅ **Scripter l'injection des incidents** — une commande par famille :
+  - **(A) retard consommateur** : `./scripts/demo-incident.sh A` (orange, ~40 s) ;
+  - **(B) réplication dégradée** : `./scripts/demo-incident.sh B` (jaune) ;
+  - **(C) incident PostgreSQL** : `./scripts/demo-incident.sh C` (rouge — arrêt du conteneur 40 s) ;
+  - **(D) traitement lent** : `./scripts/demo-diagnostic.sh --cases D-traitement-lent` (bleu) ;
+  - campagne complète : `./scripts/demo-diagnostic.sh` (exporteur + tous les cas).
   - ✅ **(D) traitement lent — symptôme 2 (v2, 09/11/2026)** : cas `D-traitement-lent` dans
     `scripts/diagnostic-campaign.sh` (famille attendue `slow_processing`) — scénario
     **nominal lancé via l'UI** (`POST /control`, `action=run_scenario`,
@@ -319,13 +320,14 @@ Archivée dans `preuves/phase2-recensement/reference-nominale-2026-11-03/` (run-
     traitement long à **file vide** ; si la file grossit ensuite → `consumer_backlog`
     (lien causal : un traitement long engendre une attente grossissante). Le moteur
     lit le SLA de l'UI (`decision_sla_seconds`) dans `/health/details?decision_sla_seconds=3`.
-- ⬜ Ajouter un essai **NOMINAL témoin** (contrôle des faux positifs).
-- ⬜ Automatiser l'enchaînement : scénarios + collecte des relevés (commandes + sorties), **rejouable par un autre groupe**.
-- ⬜ Mesurer pour tout diagnostic déterminé :
-  - **justesse** du diagnostic (bonne cause identifiée) ;
-  - **délai de détection** ;
-  - **taux de faux positifs**.
-- ⬜ Vérifier la **fraîcheur des sondes** : le système d'observation peut être affecté par l'incident (âge de collecte InfluxDB, etc.).
+- ✅ Ajouter un essai **NOMINAL témoin** (contrôle des faux positifs) : 5 témoins en campagne phase 4 — **0 faux positif sur 70 échantillons** (IC 95 % borne sup. ~5 %) → [`analyse-theorique-diagnostic.md`](docs/architecture/analyse-theorique-diagnostic.md) §6.
+- ✅ Automatiser l'enchaînement : scénarios + collecte des relevés, **rejouable par un autre groupe** → `scripts/diagnostic-campaign.sh` + `scripts/demo-diagnostic.sh` (une commande).
+- ✅ Mesurer pour tout diagnostic déterminé (campagne phase 4, 40 échantillons d'incident) :
+  - **justesse** : 4/4 familles correctes, 0 famille erronée nommée ;
+  - **délai de détection** : 3 s – 25 s (moyenne 14,25 s), ≤ 30 s (garantie) ;
+  - **taux de faux positifs** : 0 sur 70 échantillons nominaux.
+  → [`analyse-theorique-diagnostic.md`](docs/architecture/analyse-theorique-diagnostic.md) §6.
+- ✅ Vérifier la **fraîcheur des sondes** : âge des mesures vérifié avant toute conclusion (garde-fou 75 s → `probes_stale`), panneaux d'âge dans le dashboard → [`analyse-theorique-diagnostic.md`](docs/architecture/analyse-theorique-diagnostic.md) §5.2.
 
 ---
 
@@ -333,20 +335,20 @@ Archivée dans `preuves/phase2-recensement/reference-nominale-2026-11-03/` (run-
 
 **Objectif : prouver que le diagnostic repose sur la donnée, pas sur un graphique.**
 
-- ⬜ Vérifier **CHAQUE conclusion contre Kafka ET PostgreSQL** (`tp-kafka.sh`, `tp-db.sh`, consumer groups, contenu des tables), pas seulement contre un dashboard Grafana.
-- ⬜ Démontrer que le diagnostic **NE CONFOND PAS** : backlog consommateur / rejet métier / perte de données.
+- ✅ Vérifier **CHAQUE conclusion contre Kafka ET PostgreSQL** : croisement `tp-kafka.sh` / `tp-db.sh` en direct, contrôle de fermeture (800 == 800 == 800, écarts 0, lag 0) → [`preuves/phase5-croisee-2026-11-05/`](preuves/phase5-croisee-2026-11-05/SYNTHESE.md) (4/4 PASS) + rejeu indépendant (Madi, 08/11).
+- ✅ Démontrer que le diagnostic **NE CONFOND PAS** : backlog ≠ rejet ≠ perte — A-drainé finit avec 600/600 en base, rejets-metier produit 0 verdict, C-rattrapé 800/800 → [`analyse-theorique-diagnostic.md`](docs/architecture/analyse-theorique-diagnostic.md) §6.6.
 
 ---
 
 ## 9. Phase 6 — Livrables et preuves
 
-- ⬜ **Guide de diagnostic reproductible**, utilisable par un autre groupe pendant un incident (recette praticienne pas à pas).
-- ⬜ **Note de conception courte** (choix techniques + justification des seuils).
-- ⬜ **Protocole d'essai exécutable par un autre groupe** (commandes, scénarios, valeurs attendues).
-- ⬜ **Relevés pour au moins 3 situations distinctes** (+ le témoin nominal).
-- ⬜ **L'amélioration d'observabilité réellement exploitable** (le produit).
-- ⬜ Déposer les preuves **synthétiques et rejouables** dans `preuves/` (pas les sorties volumineuses de `runtime/`, qui restent exclues).
-- ⬜ **Conclusion** qui dit ce que la garantie couvre et ne couvre pas ; un résultat négatif est recevable s'il est rigoureusement établi.
+- ✅ **Guide de diagnostic reproductible**, utilisable par un autre groupe pendant un incident → [`docs/operations/guide-diagnostic.md`](docs/operations/guide-diagnostic.md) ; testé par un praticien tiers ([`travail/notes/relecture-guide-praticien.md`](travail/notes/relecture-guide-praticien.md)).
+- ✅ **Note de conception courte** (choix techniques + justification des seuils) → [`docs/architecture/diagnostic-engine-design.md`](docs/architecture/diagnostic-engine-design.md) + analyse théorique §5.
+- ✅ **Protocole d'essai exécutable par un autre groupe** (commandes, scénarios, valeurs attendues) → [`travail/notes/protocole-campagne-phase4.md`](travail/notes/protocole-campagne-phase4.md) + les scripts une commande (`demo-diagnostic.sh`, `demo-incident.sh`).
+- ✅ **Relevés pour au moins 3 situations distinctes** (+ le témoin nominal) : 4 incidents + 5 témoins (phase 4), 4 cas croisés (phase 5), impact métier (phase 7) → [`preuves/`](preuves/).
+- ✅ **L'amélioration d'observabilité réellement exploitable** (le produit) : moteur + CLI `diagnose.sh` + vue Grafana permanente `simul-pix-diagnostic` + scripts de démonstration (`demo-diagnostic.sh`, `demo-incident.sh`).
+- ✅ Déposer les preuves **synthétiques et rejouables** dans `preuves/` (169 fichiers commités ; `runtime/` reste exclu).
+- ✅ **Conclusion** qui dit ce que la garantie couvre et ne couvre pas ; un résultat négatif est recevable s'il est rigoureusement établi → conception §9 + [`analyse-theorique-diagnostic.md`](docs/architecture/analyse-theorique-diagnostic.md) §7-§9.
 
 ---
 
@@ -354,7 +356,7 @@ Archivée dans `preuves/phase2-recensement/reference-nominale-2026-11-03/` (run-
 
 **🎁 Facultative (si temps)**
 
-- ⬜ Comparer seuils **fixes** à une détection **adaptative** ; une règle explicite justifiée et évaluée suffit pour le minimum, l'apprentissage machine n'est pas exigé.
+- 🎁 Comparer seuils **fixes** à une détection **adaptative** : laissée en réserve (le sujet ne l'exige pas) ; justification du choix des seuils fixes → [`analyse-theorique-diagnostic.md`](docs/architecture/analyse-theorique-diagnostic.md) §5.4.
 
 ---
 
@@ -362,9 +364,9 @@ Archivée dans `preuves/phase2-recensement/reference-nominale-2026-11-03/` (run-
 
 **Encouragée**
 
-- ⬜ Formaliser les hypothèses de cause, les observations qui les discriminent et le cas indéterminé.
-- ⬜ Justifier les seuils ; mesurer délai de détection, faux positifs et erreurs de diagnostic sur des incidents connus.
-- ⬜ Consulter `TP/SAé/analyse-recherche-limos.md` pour les pistes de lecture et préparer un échange avec l'enseignant/LIMOS.
+- ✅ Formaliser les hypothèses de cause, les observations qui les discriminent et le cas indéterminé → [`docs/architecture/analyse-theorique-diagnostic.md`](docs/architecture/analyse-theorique-diagnostic.md) (Ania, PR #4) : fonction de diagnostic, 5 lignes de matrice, 7 raisons d'abstention.
+- ✅ Justifier les seuils ; mesurer délai de détection, faux positifs et erreurs de diagnostic sur des incidents connus → même doc §5-§6 : délai 3-25 s ≤ 30 s, 0 FP sur 70 échantillons (IC ≤ ~5 %), 4/4 familles.
+- ✅ Consulter `TP/SAé/analyse-recherche-limos.md` (sujet 5 Diagnostic : « passer d'une courbe inquiétante à une cause vérifiable ») ; pistes de lecture + axes LIMOS (SIC, ODPS) → même doc §10 ; échange à mener en soutenance.
 
 ---
 
@@ -372,11 +374,11 @@ Archivée dans `preuves/phase2-recensement/reference-nominale-2026-11-03/` (run-
 
 **Tout au long, pas à la fin.**
 
-- ⬜ Dépôt dérivé privé déjà créé : y travailler exclusivement (`https://github.com/TomPERRIN/ISIMA-TP-kafka-2026-...`).
-- ⬜ Inviter `williamguyotlenat@icloud.com` comme collaborateur (dès le début).
-- ⬜ Committer régulièrement avec des messages explicites ; documenter les contributions non-code de chaque membre.
-- ⬜ Mettre à jour le **README racine** : sujet traité, garantie visée, démarche pour lancer la plateforme + rejouer les essais, mention « dérivé de simul-pix ».
-- ⬜ Vérifier avant chaque publication : **pas de secrets** (`infra/kafka/secrets/`), **pas de `runtime/`** (volumes, caches, gros dumps) — preuves = fichiers synthétiques de `preuves/`.
+- ✅ Dépôt dérivé privé créé, travail exclusif dessus (`https://github.com/TomPERRIN/ISIMA-TP-kafka-2026-...`).
+- ✅ Inviter `williamguyotlenat@icloud.com` comme collaborateur — **invitation acceptée** (`wiguyot`, confirmé 09/11/2026).
+- ✅ Commits réguliers avec messages explicites ; contributions non-code documentées → [`travail/avancement.md`](travail/avancement.md).
+- ✅ Mettre à jour le **README racine** : sujet traité, garantie visée, démarche pour lancer la plateforme + rejouer les essais, mention « dérivé de simul-pix ».
+- ✅ Vérifier avant chaque publication : **pas de secrets** (`infra/kafka/secrets/`), **pas de `runtime/`** (volumes, caches, gros dumps) — vérifié 09/11/2026 : seuls des `.gitkeep` suivis, preuves synthétiques de `preuves/`.
 - ⬜ Veille de la soutenance : passer le dépôt en **PUBLIC** et transmettre l'URL à l'enseignant (dépôt inaccessible = rendu manquant).
 
 ---
