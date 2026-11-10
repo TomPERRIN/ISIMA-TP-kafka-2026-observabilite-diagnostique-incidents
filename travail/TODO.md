@@ -245,9 +245,9 @@ preuves dans `preuves/phase5-croisee-2026-11-05/`.
 
 **Encouragée**
 
-- ⬜ Formaliser les hypothèses de cause, les observations qui les discriminent et le cas indéterminé.
-- ⬜ Justifier les seuils ; mesurer délai de détection, faux positifs et erreurs de diagnostic sur des incidents connus.
-- ⬜ Consulter `TP/SAé/analyse-recherche-limos.md` pour les pistes de lecture et préparer un échange avec l'enseignant/LIMOS.
+- ✅ Formaliser les hypothèses de cause, les observations qui les discriminent et le cas indéterminé → [`docs/architecture/analyse-theorique-diagnostic.md`](../docs/architecture/analyse-theorique-diagnostic.md) (Ania, PR #4) : fonction de diagnostic, 5 lignes de matrice, 7 raisons d'abstention.
+- ✅ Justifier les seuils ; mesurer délai de détection, faux positifs et erreurs de diagnostic sur des incidents connus → même doc §5-§6 : délai 3-25 s ≤ 30 s, 0 FP sur 70 échantillons (IC 95 % borne sup. ~5 %), 4/4 familles.
+- ✅ Consulter `TP/SAé/analyse-recherche-limos.md` (sujet 5 Diagnostic) ; pistes de lecture + axes LIMOS (SIC, ODPS) → même doc §10 ; échange à mener en soutenance.
 
 ---
 
@@ -255,20 +255,20 @@ preuves dans `preuves/phase5-croisee-2026-11-05/`.
 
 **Tout au long, pas à la fin.**
 
-- ⬜ Travailler exclusivement sur le dépôt dérivé privé (`https://github.com/TomPERRIN/ISIMA-TP-kafka-2026-...`).
-- ⬜ Inviter `williamguyotlenat@icloud.com` comme collaborateur (dès le début).
-- ⬜ Committer régulièrement avec des messages explicites ; documenter les contributions non-code de chaque membre.
-- ⬜ Mettre à jour le **README racine** : sujet traité, garantie visée, démarche pour lancer la plateforme + rejouer les essais, mention « dérivé de simul-pix ».
-- ⬜ Vérifier avant chaque publication : **pas de secrets** (`infra/kafka/secrets/`), **pas de `runtime/`** (volumes, caches, gros dumps) — preuves = fichiers synthétiques de `preuves/`.
+- ✅ Travailler exclusivement sur le dépôt dérivé privé (`https://github.com/TomPERRIN/ISIMA-TP-kafka-2026-...`).
+- ✅ Inviter `williamguyotlenat@icloud.com` comme collaborateur — **invitation acceptée** (`wiguyot`, confirmé 09/11/2026).
+- ✅ Committer régulièrement avec des messages explicites ; documenter les contributions non-code de chaque membre → [`avancement.md`](avancement.md).
+- ✅ Mettre à jour le **README racine** : sujet traité, garantie visée, démarche pour lancer la plateforme + rejouer les essais, mention « dérivé de simul-pix ».
+- ✅ Vérifier avant chaque publication : **pas de secrets** (`infra/kafka/secrets/`), **pas de `runtime/`** (volumes, caches, gros dumps) — vérifié 09/11/2026 : seuls des `.gitkeep` suivis, preuves synthétiques de `preuves/`.
 - ⬜ Veille de la soutenance : passer le dépôt en **PUBLIC** et transmettre l'URL à l'enseignant (dépôt inaccessible = rendu manquant).
 
 ---
 
 ## 9. Phase 0/1 — Restes d'organisation
 
-- ⬜ Former un groupe de 4 minimum, répartir les rôles (analyse, développement, essais, documentation), désigner un responsable d'intégration, prévoir un point de synchronisation par séance.
-- ⬜ Confirmer/inviter le collaborateur GitHub (voir ci-dessus).
-- 🎁 Creuser l'anomalie `validate-observability.sh` (« must specify org ID or org name », flag `--org` absent du script).
+- ✅ Former un groupe de 4 minimum, répartir les rôles (analyse, développement, essais, documentation), désigner un responsable d'intégration, prévoir un point de synchronisation par séance — groupe de 5, responsable d'intégration : Tom.
+- ✅ Confirmer/inviter le collaborateur GitHub — acceptée (voir Phase 9).
+- 🎁 Creuser l'anomalie `validate-observability.sh` (« must specify org ID or org name », flag `--org` absent du script) — **toujours présente** (shebang `zsh` + crash ligne 11) ; bonus non bloquant pour le rendu.
 
 ---
 

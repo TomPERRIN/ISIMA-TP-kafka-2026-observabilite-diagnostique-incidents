@@ -463,15 +463,13 @@ stack est relancée.
 
 ## 5. Prochaines étapes
 
-1. **Pusher la phase 7** : moteur + CLI + tests + scripts de preuve + preuves + docs
-   + pilotage (liste fournie à l'utilisateur).
-2. **Phase 9 — rendu GitHub final** (à faire en continu) : README racine (sujet,
-   garantie, démarche de rejeu incluant `impact-metier-proof.sh`), vérifier pas de
-   secrets ni de `runtime/` déposé, collaborateur invité, dépôt en PUBLIC la veille
-   de la soutenance.
-3. **Phase 8 — dimension théorique (encouragée)** : formaliser les hypothèses de
-   cause / observations discriminantes / cas indéterminé ; consulter
-   `TP/SAé/analyse-recherche-limos.md` et préparer l'échange avec l'enseignant/LIMOS.
-4. Extensions restées en réserve (si surplus de temps) : détection adaptative, vue
-   HTTP/panneau Grafana du moteur.
+1. **Fusion de la PR #8** (raccourci incident A à ~40 s) par Tom — tout le reste est dans `main`.
+2. **Veille de la soutenance** : passer le dépôt en **PUBLIC** + transmettre l'URL à l'enseignant
+   (invitation acceptée le 09/11/2026).
+3. **Soutenance** : fiche de préparation → [`notes/soutenance-preparation.md`](notes/soutenance-preparation.md)
+   (démo en 2 commandes, récit du bug, chiffres clés, questions probables).
+4. **Échange avec l'enseignant/LIMOS** (encouragé) : axes SIC / ODPS, pistes de lecture
+   → [`docs/architecture/analyse-theorique-diagnostic.md`](../docs/architecture/analyse-theorique-diagnostic.md) §10.
+5. Extensions restées en réserve (si surplus de temps) : détection adaptative, anomalie
+   `validate-observability.sh`.
 
