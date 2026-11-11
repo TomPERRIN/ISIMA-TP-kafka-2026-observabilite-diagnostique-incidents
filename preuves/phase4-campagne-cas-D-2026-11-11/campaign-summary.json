@@ -1,0 +1,66 @@
+{
+ "justesse": "0/1",
+ "faux_positifs_temoins": "0 (sur 0 témoins, 0 échantillons)",
+ "delai_detection": {
+  "par_cas": {},
+  "max_s": null,
+  "garantie": "<= 30 s"
+ },
+ "critere1_100_pourcent": false,
+ "critere3_delai_30s": false,
+ "critere4_zero_fp": true,
+ "couverture": {
+  "families": [
+   {
+    "family": "consumer_backlog",
+    "cases": [],
+    "exerciced": false
+   },
+   {
+    "family": "slow_processing",
+    "cases": [
+     {
+      "case": "D-traitement-lent",
+      "vue": false,
+      "verdicts": 0
+     }
+    ],
+    "exerciced": false
+   },
+   {
+    "family": "kafka_replication",
+    "cases": [],
+    "exerciced": false
+   },
+   {
+    "family": "persistence",
+    "cases": [],
+    "exerciced": false
+   }
+  ],
+  "families_exerciced": "0/4",
+  "complete": false,
+  "temoin_zero_fp": false,
+  "indetermine_explicite": false
+ },
+ "couverture_familles": false,
+ "cases": [
+  {
+   "case": "D-traitement-lent",
+   "expected_family": "slow_processing",
+   "is_witness": false,
+   "samples": 7,
+   "reachable": 7,
+   "unreachable": 0,
+   "verdict_counts": {
+    "consumer_backlog": 6,
+    "healthy": 1
+   },
+   "indeterminate_reasons": [],
+   "cli_failed": 0,
+   "conclusive": false,
+   "needs_second_sample_before": 0,
+   "pass": false
+  }
+ ]
+}

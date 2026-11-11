@@ -49,13 +49,13 @@ Options de `diagnostic-campaign.sh` :
 | `B-replication` | `replication_lag` : kafka-3 arrêté 20 s | URP > 0, un broker absent de l'instantané réplication | `kafka_replication` | `broker_down` ou `replication_catchup` |
 | `C-postgres-indispo` | `docker compose stop postgres` 40 s au milieu du flux | `db_*` figé / sonde PG en échec alors que `generated` monte | `persistence` | `postgres_unavailable` |
 | `C-postgres-degrade` | `consumer_lag` : persisters 350 ms, décision 0 ms | lag persisters + écart de persistance qui S'ACCROÎT | `persistence` | `persister_slow` |
-| `D-traitement-lent` | nominal via l'UI (`POST /control`, `decision_sla_seconds=3`) + `kafka_latency` (250 ms sur `pix-decision-engine`) au milieu du flux | latence > SLA × 80 % sur 2 échantillons, file vide | `slow_processing` | `sla_config` |
+| `D-traitement-lent` | nominal via l'UI (`POST /control`, `decision_sla_seconds=3`) + tc netem `kafka_latency` **850 ms** sur `pix-decision-engine` injecté APRÈS stabilité des conteneurs, generator en pause dès ~7 messages (fenêtre SQL quasi vide) puis relancé avec le shaper | lag lecteur qui croît (~0,66 msg/s) : la file grossit — le verdict `slow_processing` à file vide est **hors de portée en live** (angle mort documenté, SYNTHESE de la preuve) | `consumer_backlog` (verdict réel) | `reader_backlog` |
 
 Profils : `A_PROCESSING_MS` (400 ms par défaut), `C_PERSIST_MS` (350),
 `PG_OUTAGE_S` (40), `PG_INJECT_DELAY_S` (8), `PROFILE_TEMOIN` (« 200 10 »),
 `PROFILE_INCIDENT` (« 600 20 »), `PROFILE_C_INDISPO` (« 800 15 ») ;
-cas D : `D_SLA_SECONDS` (3), `D_TOTAL_MESSAGES` (1500), `D_RATE_PER_SECOND` (20),
-`D_WARMUP_S` (25).
+cas D : `D_SLA_SECONDS` (3), `D_TOTAL_MESSAGES` (100), `D_RATE_PER_SECOND` (1),
+`D_GENERATED_STOP` (6), `D_DELAY_MS` (850), `D_JITTER_MS` (40), `D_REC_WINDOW` (90).
 
 ## Problèmes étudiés → diagnostic en sortie
 
@@ -65,7 +65,7 @@ cas D : `D_SLA_SECONDS` (3), `D_TOTAL_MESSAGES` (1500), `D_RATE_PER_SECOND` (20)
 | Réplication dégradée | `B-replication` | `kafka_replication` / `broker_down` ou `replication_catchup` | `preuves/phase4-campagne-2026-11-05/B-replication/` |
 | PostgreSQL indisponible | `C-postgres-indispo` | `persistence` / `postgres_unavailable` | `preuves/phase4-campagne-2026-11-05/C-postgres-indispo/` |
 | PostgreSQL dégradé | `C-postgres-degrade` | `persistence` / `persister_slow` | `preuves/phase4-campagne-2026-11-05/C-postgres-degrade/` |
-| Paiement traité trop lentement (symptôme 2) | `D-traitement-lent` | `slow_processing` / `sla_config` | à archiver au rejeu live (`./scripts/demo-diagnostic.sh --cases D-traitement-lent`) |
+| Paiement traité trop lentement (symptôme 2) | `D-traitement-lent` | `slow_processing` / `sla_config` — **angle mort en live** : verdicts réels `consumer_backlog`/`reader_backlog` (4 contraintes structurelles documentées dans la SYNTHESE de la preuve) | [`preuves/phase4-campagne-cas-D-2026-11-11/`](../../preuves/phase4-campagne-cas-D-2026-11-11/SYNTHESE.md) |
 | Aucun incident (témoin) | `temoin-1..5` | `healthy`, 0 faux positif | `preuves/phase4-campagne-2026-11-05/temoin-*/` |
 
 Le rapport (`campaign_report.py`) **vérifie automatiquement cette couverture** :

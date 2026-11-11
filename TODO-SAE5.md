@@ -320,6 +320,21 @@ Archivée dans `preuves/phase2-recensement/reference-nominale-2026-11-03/` (run-
     traitement long à **file vide** ; si la file grossit ensuite → `consumer_backlog`
     (lien causal : un traitement long engendre une attente grossissante). Le moteur
     lit le SLA de l'UI (`decision_sla_seconds`) dans `/health/details?decision_sla_seconds=3`.
+  - ✅ **(D) couverture live — angle mort documenté (11/11/2026)** : 6 essais de calibrage
+    → le verdict `slow_processing` à file vide est **structurellement hors de portée
+    en live** : débit minimum de l'API 1 msg/s (`rate=0` → burst de 500), boucle du
+    decision-engine ~3 s/msg (poll + produce + commit synchrones) → le lag franchit
+    son seuil (10) en ~15 s quand la moyenne SQL 5 min dépasse SLA×80 % (2,4 s)
+    seulement après 20-25 s, et la sonde `/health` (timeout 1 s) est aveuglée dès
+    tc ≥ 1 s. Déroulé calibré : pause du generator (fenêtre SQL quasi vide) →
+    conteneurs stables → tc netem **850 ms vérifié** → restart generator +
+    pix-traffic-shaper (l'arrêt du generator fait crasher le shaper : DNS) →
+    sondes ok → verdicts réels `consumer_backlog`/`reader_backlog` (lag 5→65,
+    ≈ 0,66 msg/s) →
+    [`preuves/phase4-campagne-cas-D-2026-11-11/SYNTHESE.md`](preuves/phase4-campagne-cas-D-2026-11-11/SYNTHESE.md)
+    (4 contraintes structurelles + runs préliminaires). Cohérent avec la matrice v2 :
+    « un traitement long engendre une attente grossissante, mais la réciproque est
+    fausse » — le tranchage file vide/latence haute reste couvert par 4 tests unitaires.
 - ✅ Ajouter un essai **NOMINAL témoin** (contrôle des faux positifs) : 5 témoins en campagne phase 4 — **0 faux positif sur 70 échantillons** (IC 95 % borne sup. ~5 %) → [`analyse-theorique-diagnostic.md`](docs/architecture/analyse-theorique-diagnostic.md) §6.
 - ✅ Automatiser l'enchaînement : scénarios + collecte des relevés, **rejouable par un autre groupe** → `scripts/diagnostic-campaign.sh` + `scripts/demo-diagnostic.sh` (une commande).
 - ✅ Mesurer pour tout diagnostic déterminé (campagne phase 4, 40 échantillons d'incident) :

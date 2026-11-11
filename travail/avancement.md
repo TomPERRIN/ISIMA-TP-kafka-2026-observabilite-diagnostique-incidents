@@ -21,7 +21,7 @@
 | Livrables finaux (guide, note de conception, conclusion) | ✅ fait (05/11) | `docs/operations/guide-diagnostic.md` + `docs/architecture/diagnostic-engine-design.md` (portée/limites = conclusion) ; protocoles + relevés déjà en place (§1.7/§1.8) |
 | Extension : impact métier (candidate #7, phase 7) | ✅ fait (05/11) | Bloc `business_impact` dans chaque verdict, vérifiable en base ; preuve 6/6 (moteur == sonde PG == SQL : 278==278==278) — `preuves/phase7-impact-metier-2026-11-05/` + `scripts/impact-metier-proof.sh` |
 | Extension : vue Grafana permanente du diagnostic | ✅ fait (08/11) | Dashboard `simulpix-diagnostic` + exporteur `diagnostic-export.sh` (étiquette « État sain » quand verdict healthy) ; cycle incident C-postgres-indispo capturé (3 captures) — `preuves/phase6-grafana-diagnostic-2026-11-08/` |
-| Extension v2 : deux symptômes distincts (file qui grossit vs traitement lent) | ✅ fait (09/11) | Famille `slow_processing` (verdict D) + déclencheur latence > SLA sur 2 échantillons ; cas D `D-traitement-lent` dans la campagne ; matrice v2 + 37 tests ; **démo Grafana en une commande** (`demo-diagnostic.sh`) + couverture automatique du rapport — couverture live à rejouer quand la plateforme tourne |
+| Extension v2 : deux symptômes distincts (file qui grossit vs traitement lent) | ✅ fait (09/11) | Famille `slow_processing` (verdict D) + déclencheur latence > SLA sur 2 échantillons ; cas D `D-traitement-lent` dans la campagne ; matrice v2 + 37 tests ; **démo Grafana en une commande** (`demo-diagnostic.sh`) + couverture automatique du rapport — couverture live tournée le 11/11 : **angle mort documenté** (§1.15) |
 | Angles morts démontrés mécaniquement | ✅ fait (09/11) | `demo-angles-morts.sh` : 9 cas sans cause nommée (B3/B4/C3/C4 + registre §5) simulés sans Docker, verdict du vrai moteur affiché cas par cas + récapitulatif « garantit / ne garantit pas » ; 22 tests ; sonde qui ment en restant fraîche = non détectée (C4b, DÉMONTRÉ) ; mode `--export` : les 14 états poussés sur la frise Grafana (protocole de l'exporteur, dashboard inchangé) |
 
 ---
@@ -433,6 +433,49 @@ passent : moteur **37/37**, rapport **10/10**, pipeline **6/6**, angles morts **
 
 ---
 
+### 1.15 Couverture live du cas D — angle mort documenté (11/11/2026)
+
+**Choix** : tourner la couverture live du cas D (`D-traitement-lent`, famille
+`slow_processing`) après calibrage. Résultat mesuré : le verdict
+`slow_processing` à file vide est **structurellement hors de portée en live** —
+décision de DOCUMENTER l'angle mort plutôt que de forcer une couverture
+artificielle, en produisant une preuve honnête (perturbation réellement
+appliquée + verdicts réels).
+
+- **Diagnostic des deux échecs préliminaires** : le reset du `run_scenario`
+  (POST /control) RECRÉE les conteneurs — une perturbation injectée pendant la
+  recréation est perdue (« No such container », run du matin = nominal
+  déguisé) ; l'arrêt du generator fait crasher le shaper (DNS `generator` non
+  résolu) → sondes aveuglées (`probe_blinded`) si on ne le relance pas ;
+- **Déroulé calibré** (essai 5 sur 6) : flux 100×1 en fond → pause du
+  generator dès ~7 messages (fenêtre SQL 5 min quasi vide) → conteneurs
+  stables (running ×2 à 5 s) → tc netem **delay=850 ms** vérifié via
+  `tc qdisc` (event `fault_verified`) → restart generator + pix-traffic-shaper
+  → sondes toutes ok → relevé 90 s → reset ; nouveaux helpers
+  `d_pause_generator_soon`, `d_wait_generator_paused`, `d_wait_container_running`,
+  `d_tc_active`, `d_wait_services_ok` ;
+- **Résultat** : healthy (lag 5) puis `consumer_backlog`/`reader_backlog` ×6
+  (lag 15 → 65, ≈ 0,66 msg/s), aucun indeterminate — preuve
+  `preuves/phase4-campagne-cas-D-2026-11-11/` (SYNTHESE.md enrichie : tableau
+  des 4 contraintes structurelles + runs préliminaires) ;
+- **Angle mort documenté** (4 contraintes mesurées) : débit minimum de l'API
+  1 msg/s (`rate=0` → burst de 500 messages) ; période de la boucle du
+  decision-engine ≈ 3 s/msg (poll + produce + commit synchrones) → le lag
+  franchit son seuil (10) en ~15 s ; la métrique déclencheuse
+  `avg_validation_latency_ms` (moyenne SQL sur 5 min) ne dépasse SLA×80 %
+  (2,4 s) qu'après 20-25 s ; la sonde `/health` (timeout 1 s) est aveuglée dès
+  tc ≥ 1 s. La course lag-vs-moyenne-SQL est toujours perdue :
+  `reader_backlog` l'emporte (ordre du moteur : persister > reader > sla) ;
+- **Cohérence matrice v2** : « un traitement long engendre une attente
+  grossissante, mais la réciproque est fausse » — le verdict `reader_backlog`
+  est CORRECT du point de vue des données observées ; le tranchage file
+  vide/latence haute (`sla_config`) reste couvert par 4 tests unitaires
+  (37/37). Couvrir ce verdict en live exigerait un levier absent de l'API de
+  pilotage (`processing_delay_ms_override` des expériences R4/R6 : la latence
+  ~5,9 s mesurée venait d'une file de 1122 messages, pas du traitement).
+
+---
+
 ## 2. Journal des décisions
 
 | Date | Décision |
@@ -464,6 +507,7 @@ passent : moteur **37/37**, rapport **10/10**, pipeline **6/6**, angles morts **
 | 09/11/2026 | **Angles morts démontrés mécaniquement** : `demo-angles-morts.sh` + `blind_spots.py` — 9 cas du catalogue (B3/B4/C3/C4 + registre §5) simulés par payloads synthétiques frais passés au vrai moteur, verdict calculé à l'exécution (pas codé en dur) ; limite majeure DÉMONTRÉE : une sonde qui ment en restant fraîche produit un `healthy` erroné (C4b) — 16 tests (`test_blind_spots.py`) ; sans Docker, rejouable en soutenance |
 | 09/11/2026 | **Angles morts sur la frise Grafana** : mode `--export` de `blind_spots.py` — les 14 états (chaque étape de chaque cas, pas seulement les verdicts finaux) poussés via le protocole de `diagnostic_export.py` (`verdict_to_line` + `send_line`, métrique `simulpix_diagnostic`, dashboard NON modifié) ; timestamp = moment du push, hold 5 s entre deux états (`SIMULPIX_BLIND_HOLD_S`, `--hold`) pour que chaque segment reste lisible ; `--print` = répétition sèche sans envoi — 6 tests (14 lignes valides, compteurs healthy=9/kafka=2/persistence=1/indeterminate=2, abandon à la 1re écriture en échec, hold entre les états mais pas après le dernier) |
 | 09/11/2026 | **Nettoyage pour le premier rendu** : scripts orphelins supprimés (`demo-incident.sh`, `test-network-perturb.py`), pilotage unifié (`travail/TODO.md` supprimé, couvert par `TODO-SAE5.md`), preuve de rejeu renommée sans login (`phase4-campagne-rejeu-2026-11-08`), `TP/SAé/AGENT.md` (artefact d'agent anglais) retiré, branche `D-traitement-lent` ajoutée dans la dispatch de `diagnostic-campaign.sh` (le cas était ignoré silencieusement), différence `stop.sh` (purge) / `stop-platform.sh` (stop simple) documentée, README à jour (démos, suites de tests 6+37+10+22, traçabilité des `run_*.py` générateurs des `.xlsx`) |
+| 11/11/2026 | **Couverture live du cas D tournée — angle mort documenté** : 6 essais de calibrage → le verdict `slow_processing` à file vide est structurellement hors de portée en live (débit min API 1 msg/s ; boucle ~3 s/msg → lag franchit son seuil 10 en ~15 s quand la moyenne SQL 5 min dépasse 2,4 s après 20-25 s ; sonde timeout 1 s aveuglée dès tc ≥ 1 s) ; preuve honnête `preuves/phase4-campagne-cas-D-2026-11-11/` (tc netem 850 ms vérifié, verdicts réels reader_backlog, lag 5→65, aucun indeterminate) ; pièges diagnostiqués : le reset du `run_scenario` recrée les conteneurs (tc perdu) et l'arrêt du generator crashe le shaper (DNS) → déroulé corrigé (pause generator → stabilité → tc vérifié → restart generator+shaper → sondes ok) ; audit du jour : 69 tests OK ; §1.15 |
 
 ---
 
@@ -483,26 +527,20 @@ passent : moteur **37/37**, rapport **10/10**, pipeline **6/6**, angles morts **
 Rien en cours — phases 2 à 7 closes. La garantie #1 est mesurée et tenue (justesse
 4/4, délai max 25 s, 0 faux positif), la candidate #2 est démontrée (4/4 PASS), les
 livrables finaux sont édités et la candidate #7 (impact métier) est implémentée et
-prouvée (6/6). Il reste la dimension théorique (facultative, encouragée) et le rendu
-GitHub final.
-
-**En attente de plateforme (v2, 09/11)** : la couverture live du cas D
-(`D-traitement-lent`, famille `slow_processing`) — délai de détection ≤ 30 s — n'est
-pas mesurable hors Docker ; le cas est codé et rejouable en une commande
-(`./scripts/demo-diagnostic.sh --cases D-traitement-lent`), à tourner quand la
-stack est relancée.
+prouvée (6/6). La couverture live du cas D est close le 11/11 en **angle mort
+documenté** (§1.15, cohérent avec la matrice v2). Restent la dimension théorique
+(facultative, encouragée), le dépôt en PUBLIC et le rendu GitHub final.
 
 ---
 
 ## 5. Prochaines étapes
 
-1. **Fusion de la PR #8** (raccourci incident A à ~40 s) par Tom — tout le reste est dans `main`.
-2. **Veille de la soutenance** : passer le dépôt en **PUBLIC** + transmettre l'URL à l'enseignant
+1. **Veille de la soutenance** : passer le dépôt en **PUBLIC** + transmettre l'URL à l'enseignant
    (invitation acceptée le 09/11/2026).
-3. **Soutenance** : fiche de préparation → [`notes/soutenance-preparation.md`](notes/soutenance-preparation.md)
+2. **Soutenance** : fiche de préparation → [`notes/soutenance-preparation.md`](notes/soutenance-preparation.md)
    (démo en 2 commandes, récit du bug, chiffres clés, questions probables).
-4. **Échange avec l'enseignant/LIMOS** (encouragé) : axes SIC / ODPS, pistes de lecture
+3. **Échange avec l'enseignant/LIMOS** (encouragé) : axes SIC / ODPS, pistes de lecture
    → [`docs/architecture/analyse-theorique-diagnostic.md`](../docs/architecture/analyse-theorique-diagnostic.md) §10.
-5. Extensions restées en réserve (si surplus de temps) : détection adaptative, anomalie
+4. Extensions restées en réserve (si surplus de temps) : détection adaptative, anomalie
    `validate-observability.sh`.
 

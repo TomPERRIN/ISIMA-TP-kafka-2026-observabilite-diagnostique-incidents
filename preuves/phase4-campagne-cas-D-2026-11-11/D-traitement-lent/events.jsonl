@@ -1,0 +1,9 @@
+{"t_epoch":1794435251,"event":"case_start","detail":""}
+{"t_epoch":1794435251,"event":"scenario_launch","detail":"POST /control run_scenario nominal 100x1, SLA UI=3s, stop generator dès generated>=6, tc delay=850ms"}
+{"t_epoch":1794435325,"event":"generator_paused","detail":"docker compose stop generator (generated=7 >= 6)"}
+{"t_epoch":1794435335,"event":"fault_injected","detail":"kafka_latency delay=850ms jitter=40ms sur pix-decision-engine (POST /control, SLA UI=3 s)"}
+{"t_epoch":1794435337,"event":"fault_verified","detail":"tc qdisc netem visible dans pix-decision-engine (delay=850 ms)"}
+{"t_epoch":1794435340,"event":"generator_resumed","detail":"docker compose start generator pix-traffic-shaper"}
+{"t_epoch":1794435344,"event":"services_ok_after_resume","detail":"toutes les sondes ok après le restart"}
+{"t_epoch":1794435448,"event":"fault_recovered","detail":"POST /control reset_network_profile"}
+{"t_epoch":1794435448,"event":"case_end","detail":"window=90s; tc_delay=850ms"}
