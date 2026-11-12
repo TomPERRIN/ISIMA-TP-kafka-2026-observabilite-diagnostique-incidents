@@ -195,6 +195,9 @@ deux personnes ne disent pas la même chose.
 
 ## 9. Plan des slides (11 slides, ~10 min)
 
+**Deck généré** : `travail/soutenance-sae5.pptx` (rôles + contenus déjà remplis, à ouvrir dans
+PowerPoint/LibreOffice pour ajuster la mise en forme).
+
 | # | Titre | Qui | Contenu |
 |---|---|---|---|
 | 1 | **Titre** | tous | « SAÉ 5 — Observabilité et diagnostic d'incidents (Simul-Pix) » ; l'équipe ; la garantie en une ligne |
